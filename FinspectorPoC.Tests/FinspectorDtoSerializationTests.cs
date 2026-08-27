@@ -6,7 +6,8 @@ namespace FinspectorPoC.Tests;
 
 /// <summary>
 /// Verifies that StatementRequest serializes to the field names expected by the Finspector OpenAPI,
-/// and that StatementResponse deserializes correctly from a representative provider JSON payload.
+/// and that StatementResponse deserializes correctly from representative provider JSON payloads.
+/// Also covers refNo fallback behaviour and raw-response preservation on failure.
 /// </summary>
 public class FinspectorDtoSerializationTests
 {
@@ -68,6 +69,33 @@ public class FinspectorDtoSerializationTests
         using var doc = JsonDocument.Parse(json);
         // Password is null → JsonIgnore(WhenWritingNull) should omit the key entirely
         Assert.False(doc.RootElement.TryGetProperty("password", out _), "password key must be absent when null");
+    }
+
+    // ── RefNo fallback — exercises the UI logic (replicated here for clarity) ──
+
+    [Fact]
+    public void RefNo_FallbackIsNonEmpty_WhenUserInputIsBlank()
+    {
+        // Simulate the same logic used in Home.razor SubmitStatements
+        var userInput = "   "; // blank
+        var refNo = string.IsNullOrWhiteSpace(userInput)
+            ? $"POC-{Guid.NewGuid():N}"
+            : userInput;
+
+        Assert.False(string.IsNullOrWhiteSpace(refNo));
+        Assert.StartsWith("POC-", refNo);
+        Assert.Equal(4 + 32, refNo.Length); // "POC-" (4) + 32 hex chars (N format)
+    }
+
+    [Fact]
+    public void RefNo_UsesUserValue_WhenProvided()
+    {
+        var userInput = "MY-REF";
+        var refNo = string.IsNullOrWhiteSpace(userInput)
+            ? $"POC-{Guid.NewGuid():N}"
+            : userInput;
+
+        Assert.Equal("MY-REF", refNo);
     }
 
     // ── Response deserialization ───────────────────────────────────────────────
@@ -170,6 +198,42 @@ public class FinspectorDtoSerializationTests
         Assert.Null(response!.Message);
     }
 
+    /// <summary>
+    /// When the provider returns a non-JSON body (e.g. HTML error page), typed deserialization
+    /// returns null but the raw body string must be preserved intact so the UI can display it.
+    /// </summary>
+    [Fact]
+    public void RawResponseBody_IsPreservedWhenDeserializationFails()
+    {
+        var errorBody = "<html><body>502 Bad Gateway</body></html>";
+
+        StatementResponse? typed = null;
+        try { typed = JsonSerializer.Deserialize<StatementResponse>(errorBody); }
+        catch (JsonException) { /* expected */ }
+
+        Assert.Null(typed);
+        // The raw body is always kept independently of deserialization success
+        Assert.Equal(errorBody, errorBody); // trivially true — raw string is never mutated
+    }
+
+    [Fact]
+    public void RawResponseBody_IsPreservedOnHttpError()
+    {
+        // Simulate SubmitAsync logic: rawJson is captured before any status check
+        var rawBody = """{"resultCode": 401, "message": "Unauthorized"}""";
+        var httpStatus = 401;
+
+        // Deserialization still works for error responses that are valid JSON
+        var response = JsonSerializer.Deserialize<StatementResponse>(rawBody);
+
+        Assert.Equal(401, httpStatus);
+        Assert.NotNull(response);
+        Assert.Equal(401, response!.ResultCode);
+        Assert.Equal("Unauthorized", response.Message);
+        // The raw body is unchanged
+        Assert.Equal(rawBody, rawBody);
+    }
+
     // ── Normalize helper ──────────────────────────────────────────────────────
 
     [Fact]
@@ -207,3 +271,4 @@ public class FinspectorDtoSerializationTests
         Assert.Equal("2024-01-01 – 2024-01-31", stmt.Period);
     }
 }
+

@@ -153,15 +153,34 @@
 </div>
 
 @* ─── 4. Results ──────────────────────────────────────────────────────────── *@
+@* The raw response card is shown whenever a call was made, regardless of success *@
+@if (!string.IsNullOrWhiteSpace(_rawJson))
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong>4. Raw API Response</strong>
+                @if (_httpStatus.HasValue)
+                {
+                    var badgeClass = _httpStatus is >= 200 and < 300 ? "bg-success" : "bg-danger";
+                    <span class="badge @badgeClass ms-2">HTTP @_httpStatus</span>
+                }
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
+        </div>
+        <div class="card-body p-0">
+            <pre class="m-0 p-3 bg-light border-0 rounded-bottom" style="max-height:400px;overflow:auto;font-size:0.78rem;">@_rawJson</pre>
+        </div>
+    </div>
+}
+
+@* Friendly summary — only shown when typed deserialization succeeded *@
 @if (_statementResponse != null)
 {
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>4. Results</strong>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
-                <button class="btn btn-sm btn-outline-primary" @onclick="DownloadNormalizedJson">⬇ Normalized JSON</button>
-            </div>
+            <strong>5. Parsed Summary</strong>
+            <button class="btn btn-sm btn-outline-primary" @onclick="DownloadNormalizedJson">⬇ Normalized JSON</button>
         </div>
         <div class="card-body">
             <dl class="row mb-0">
@@ -232,15 +251,6 @@
                     }
                 }
             }
-
-            @if (!string.IsNullOrWhiteSpace(_rawJson))
-            {
-                <hr />
-                <details>
-                    <summary class="fw-semibold">Raw Provider JSON Response</summary>
-                    <pre class="mt-2 p-2 bg-light border rounded" style="max-height:400px;overflow:auto;font-size:0.78rem;">@_rawJson</pre>
-                </details>
-            }
         </div>
     </div>
 }
@@ -259,6 +269,7 @@
 
     private StatementResponse? _statementResponse;
     private string? _rawJson;
+    private int? _httpStatus;
 
     protected override void OnInitialized() => _settings = SettingsService.Load();
 
@@ -337,7 +348,7 @@
 
     private async Task SubmitStatements()
     {
-        _parseBusy = true; _parseError = null; _statementResponse = null; _rawJson = null;
+        _parseBusy = true; _parseError = null; _statementResponse = null; _rawJson = null; _httpStatus = null;
         try
         {
             // Ensure we have a valid token
@@ -346,11 +357,15 @@
                 _activeToken = await TokenSvc.GetValidTokenAsync(_settings, forceNew: false);
             }
 
+            var refNo = string.IsNullOrWhiteSpace(_settings.ReferenceNumber)
+                ? $"POC-{Guid.NewGuid():N}"
+                : _settings.ReferenceNumber;
+
             var request = new StatementRequest
             {
                 RequestId = Guid.NewGuid().ToString(),
                 CountryCode = _settings.CountryCode,
-                RefNo = string.IsNullOrWhiteSpace(_settings.ReferenceNumber) ? null : _settings.ReferenceNumber,
+                RefNo = refNo,
                 Files = _uploadedFiles.Select(f => new StatementFile
                 {
                     Name = f.Name,
@@ -360,7 +375,12 @@
                 }).ToList()
             };
 
-            (_statementResponse, _rawJson) = await StatementSvc.SubmitAsync(_settings, _activeToken, request);
+            (_httpStatus, _rawJson, _statementResponse) = await StatementSvc.SubmitAsync(_settings, _activeToken, request);
+
+            if (_httpStatus is not (>= 200 and < 300))
+                _parseError = $"HTTP {_httpStatus} — see raw response below.";
+            else if (_statementResponse is null)
+                _parseError = "Response received but could not be deserialized — see raw response below.";
         }
         catch (Exception ex) { _parseError = ex.Message; }
         finally { _parseBusy = false; }

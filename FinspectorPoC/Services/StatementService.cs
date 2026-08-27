@@ -12,7 +12,12 @@ public class StatementService(IHttpClientFactory httpClientFactory)
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
-    public async Task<(StatementResponse response, string rawJson)> SubmitAsync(
+    /// <summary>
+    /// Posts the statement request and returns the HTTP status, raw response body, and
+    /// a best-effort typed response (null when the body cannot be deserialized).
+    /// The raw body is always returned so the caller can display/download it even on failure.
+    /// </summary>
+    public async Task<(int httpStatus, string rawJson, StatementResponse? response)> SubmitAsync(
         AppSettings settings,
         string bearerToken,
         StatementRequest request,
@@ -30,14 +35,19 @@ public class StatementService(IHttpClientFactory httpClientFactory)
 
         using var httpResponse = await client.PostAsJsonAsync(url, request, ct);
         var rawJson = await httpResponse.Content.ReadAsStringAsync(ct);
+        var httpStatus = (int)httpResponse.StatusCode;
 
-        if (!httpResponse.IsSuccessStatusCode)
-            throw new HttpRequestException($"Statement API failed ({(int)httpResponse.StatusCode}): {rawJson}");
+        StatementResponse? typed = null;
+        try
+        {
+            typed = JsonSerializer.Deserialize<StatementResponse>(rawJson);
+        }
+        catch (JsonException)
+        {
+            // Deserialization failure — caller displays the raw body as-is
+        }
 
-        var result = JsonSerializer.Deserialize<StatementResponse>(rawJson)
-            ?? throw new InvalidOperationException("Empty response from statement API.");
-
-        return (result, rawJson);
+        return (httpStatus, rawJson, typed);
     }
 
     public static NormalizedResult Normalize(StatementResponse response) => new()
