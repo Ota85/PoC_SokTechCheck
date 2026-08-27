@@ -1,0 +1,404 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using FinspectorPoC.Models
+@using FinspectorPoC.Services
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
+@inject LocalSettingsService SettingsService
+@inject TokenService TokenSvc
+@inject StatementService StatementSvc
+@inject IJSRuntime JS
+
+<PageTitle>Finspector PoC</PageTitle>
+
+@* ─── Security Warning ─────────────────────────────────────────────────────── *@
+<div class="alert alert-danger mb-3" role="alert">
+    <strong>⚠️ LOCAL DEVELOPER POC ONLY</strong> — Credentials, tokens, and uploaded PDFs are stored/displayed
+    locally and are <strong>never encrypted</strong>. Do <strong>not</strong> deploy this application publicly
+    or commit <code>appsettings.local.json</code> to source control.
+</div>
+
+@* ─── 1. Connection Settings ───────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>1. Connection Settings</strong>
+        <small class="text-muted">Config file: <code>@SettingsService.FilePath</code></small>
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label">Base API URL</label>
+                <input class="form-control" @bind="_settings.BaseApiUrl" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Token URL</label>
+                <input class="form-control" @bind="_settings.TokenUrl" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Statement Path</label>
+                <input class="form-control" @bind="_settings.StatementPath" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Client ID</label>
+                <input class="form-control" @bind="_settings.ClientId" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Client Secret</label>
+                <input class="form-control" @bind="_settings.ClientSecret" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">OAuth Scope</label>
+                <input class="form-control" @bind="_settings.OAuthScope" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Country Code</label>
+                <input class="form-control" @bind="_settings.CountryCode" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Reference Number <small class="text-muted">(optional)</small></label>
+                <input class="form-control" @bind="_settings.ReferenceNumber" />
+            </div>
+        </div>
+        <button class="btn btn-primary mt-3" @onclick="SaveSettings">💾 Save Settings</button>
+        @if (_settingsSaved)
+        {
+            <span class="ms-2 text-success">Saved ✓</span>
+        }
+    </div>
+</div>
+
+@* ─── 2. ****** Panel ─────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>2. ****** Panel</strong></div>
+    <div class="card-body">
+        <div class="d-flex gap-2 flex-wrap mb-3">
+            <button class="btn btn-success" @onclick="GetNewToken" disabled="@_tokenBusy">
+                @(_tokenBusy ? "Requesting…" : "🔑 Get New Token")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="UseSavedToken" disabled="@(string.IsNullOrWhiteSpace(_settings.SavedToken))">
+                ♻️ Use Saved Token
+            </button>
+            <button class="btn btn-outline-danger" @onclick="ClearToken" disabled="@(string.IsNullOrWhiteSpace(_settings.SavedToken))">
+                🗑 Clear Saved Token
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_tokenError))
+        {
+            <div class="alert alert-danger">@_tokenError</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_activeToken))
+        {
+            <div class="mb-2">
+                <label class="form-label fw-semibold">Active Token</label>
+                <textarea class="form-control font-monospace" rows="3" readonly>@_activeToken</textarea>
+            </div>
+            <div>
+                <label class="form-label fw-semibold">Expiry</label>
+                <input class="form-control" readonly value="@(_settings.TokenExpiry?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")" />
+                @if (_settings.TokenExpiry < DateTimeOffset.UtcNow)
+                {
+                    <span class="text-danger ms-2">Token expired!</span>
+                }
+                else
+                {
+                    <span class="text-success ms-2">Valid ✓</span>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@* ─── 3. PDF Upload & Parse ────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>3. PDF Upload &amp; Parse</strong></div>
+    <div class="card-body">
+        <InputFile OnChange="OnFilesSelected" multiple accept=".pdf" class="form-control mb-3" />
+
+        @if (_uploadedFiles.Any())
+        {
+            <table class="table table-sm mb-3">
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Size</th>
+                        <th>Password <small class="text-muted">(if protected)</small></th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in _uploadedFiles)
+                    {
+                        <tr>
+                            <td>@f.Name</td>
+                            <td>@(f.SizeBytes / 1024) KB</td>
+                            <td><input type="password" class="form-control form-control-sm" @bind="f.Password" placeholder="(none)" /></td>
+                            <td><button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveFile(f)">✕</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <button class="btn btn-primary" @onclick="SubmitStatements" disabled="@(!_uploadedFiles.Any() || _parseBusy)">
+            @(_parseBusy ? "Submitting…" : "🚀 Submit for Parsing")
+        </button>
+
+        @if (!string.IsNullOrEmpty(_parseError))
+        {
+            <div class="alert alert-danger mt-3">@_parseError</div>
+        }
+    </div>
+</div>
+
+@* ─── 4. Results ──────────────────────────────────────────────────────────── *@
+@if (_statementResponse != null)
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>4. Results</strong>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
+                <button class="btn btn-sm btn-outline-primary" @onclick="DownloadNormalizedJson">⬇ Normalized JSON</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Result Code</dt>
+                <dd class="col-sm-9"><code>@_statementResponse.ResultCode</code></dd>
+                <dt class="col-sm-3">Message</dt>
+                <dd class="col-sm-9">@_statementResponse.ResultMessage</dd>
+                <dt class="col-sm-3">Request ID</dt>
+                <dd class="col-sm-9"><small class="text-muted">@_statementResponse.RequestId</small></dd>
+            </dl>
+
+            @if (_statementResponse.Statements?.Any() == true)
+            {
+                foreach (var stmt in _statementResponse.Statements)
+                {
+                    <hr />
+                    <h5>@stmt.BankName — @stmt.AccountHolder (<code>@stmt.AccountNumber</code>)</h5>
+                    <dl class="row">
+                        <dt class="col-sm-3">Period</dt>
+                        <dd class="col-sm-9">@stmt.StatementFromDate – @stmt.StatementToDate</dd>
+                        <dt class="col-sm-3">Currency</dt>
+                        <dd class="col-sm-9">@stmt.Currency</dd>
+                        <dt class="col-sm-3">Opening Balance</dt>
+                        <dd class="col-sm-9">@stmt.OpeningBalance?.ToString("N2")</dd>
+                        <dt class="col-sm-3">Closing Balance</dt>
+                        <dd class="col-sm-9">@stmt.ClosingBalance?.ToString("N2")</dd>
+                        <dt class="col-sm-3">Total Credits</dt>
+                        <dd class="col-sm-9 text-success">@stmt.TotalCredits?.ToString("N2")</dd>
+                        <dt class="col-sm-3">Total Debits</dt>
+                        <dd class="col-sm-9 text-danger">@stmt.TotalDebits?.ToString("N2")</dd>
+                        @if (stmt.Tags?.Any() == true)
+                        {
+                            <dt class="col-sm-3">Tags</dt>
+                            <dd class="col-sm-9">@string.Join(", ", stmt.Tags)</dd>
+                        }
+                    </dl>
+
+                    @if (stmt.Transactions?.Any() == true)
+                    {
+                        <details>
+                            <summary class="fw-semibold">Transactions (@stmt.Transactions.Count)</summary>
+                            <div class="table-responsive mt-2">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Description</th>
+                                            <th>Type</th>
+                                            <th class="text-end">Amount</th>
+                                            <th class="text-end">Balance</th>
+                                            <th>Tags</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var tx in stmt.Transactions)
+                                        {
+                                            <tr>
+                                                <td>@tx.Date</td>
+                                                <td>@tx.Description</td>
+                                                <td>@tx.Type</td>
+                                                <td class="text-end @(tx.Amount < 0 ? "text-danger" : "text-success")">@tx.Amount?.ToString("N2")</td>
+                                                <td class="text-end">@tx.Balance?.ToString("N2")</td>
+                                                <td><small>@(tx.Tags != null ? string.Join(", ", tx.Tags) : "")</small></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    }
+                }
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_rawJson))
+            {
+                <hr />
+                <details>
+                    <summary class="fw-semibold">Raw Provider JSON Response</summary>
+                    <pre class="mt-2 p-2 bg-light border rounded" style="max-height:400px;overflow:auto;font-size:0.78rem;">@_rawJson</pre>
+                </details>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private AppSettings _settings = new();
+    private bool _settingsSaved;
+
+    private string? _activeToken;
+    private bool _tokenBusy;
+    private string? _tokenError;
+
+    private List<UploadedFile> _uploadedFiles = [];
+    private bool _parseBusy;
+    private string? _parseError;
+
+    private StatementResponse? _statementResponse;
+    private string? _rawJson;
+
+    protected override void OnInitialized() => _settings = SettingsService.Load();
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    private void SaveSettings()
+    {
+        SettingsService.Save(_settings);
+        _settingsSaved = true;
+        Task.Delay(2000).ContinueWith(_ => { _settingsSaved = false; InvokeAsync(StateHasChanged); });
+    }
+
+    // ── Token ─────────────────────────────────────────────────────────────────
+
+    private async Task GetNewToken()
+    {
+        _tokenBusy = true; _tokenError = null;
+        try
+        {
+            _activeToken = await TokenSvc.RequestNewTokenAsync(_settings);
+        }
+        catch (Exception ex) { _tokenError = ex.Message; }
+        finally { _tokenBusy = false; }
+    }
+
+    private void UseSavedToken()
+    {
+        _tokenError = null;
+        if (string.IsNullOrWhiteSpace(_settings.SavedToken))
+        {
+            _tokenError = "No saved token found.";
+            return;
+        }
+        if (_settings.TokenExpiry <= DateTimeOffset.UtcNow)
+        {
+            _tokenError = "Saved token has expired. Get a new token.";
+            return;
+        }
+        _activeToken = _settings.SavedToken;
+    }
+
+    private void ClearToken()
+    {
+        _settings.SavedToken = null;
+        _settings.TokenExpiry = null;
+        _activeToken = null;
+        SettingsService.Save(_settings);
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+
+    private async Task OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        _parseError = null;
+        foreach (var file in e.GetMultipleFiles(20))
+        {
+            if (!file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                _parseError = $"'{file.Name}' is not a PDF file.";
+                continue;
+            }
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024).CopyToAsync(ms);
+            _uploadedFiles.Add(new UploadedFile
+            {
+                Name = file.Name,
+                SizeBytes = (int)ms.Length,
+                Content = ms.ToArray()
+            });
+        }
+    }
+
+    private void RemoveFile(UploadedFile f) => _uploadedFiles.Remove(f);
+
+    // ── Submit ────────────────────────────────────────────────────────────────
+
+    private async Task SubmitStatements()
+    {
+        _parseBusy = true; _parseError = null; _statementResponse = null; _rawJson = null;
+        try
+        {
+            // Ensure we have a valid token
+            if (string.IsNullOrWhiteSpace(_activeToken) || _settings.TokenExpiry <= DateTimeOffset.UtcNow)
+            {
+                _activeToken = await TokenSvc.GetValidTokenAsync(_settings, forceNew: false);
+            }
+
+            var request = new StatementRequest
+            {
+                RequestId = Guid.NewGuid().ToString(),
+                CountryCode = _settings.CountryCode,
+                ReferenceNumber = string.IsNullOrWhiteSpace(_settings.ReferenceNumber) ? null : _settings.ReferenceNumber,
+                Documents = _uploadedFiles.Select(f => new StatementDocument
+                {
+                    DocumentId = Guid.NewGuid().ToString(),
+                    FileName = f.Name,
+                    FileContent = Convert.ToBase64String(f.Content),
+                    Password = string.IsNullOrWhiteSpace(f.Password) ? null : f.Password
+                }).ToList()
+            };
+
+            (_statementResponse, _rawJson) = await StatementSvc.SubmitAsync(_settings, _activeToken, request);
+        }
+        catch (Exception ex) { _parseError = ex.Message; }
+        finally { _parseBusy = false; }
+    }
+
+    // ── Downloads ─────────────────────────────────────────────────────────────
+
+    private async Task DownloadRawJson()
+    {
+        if (string.IsNullOrEmpty(_rawJson)) return;
+        await DownloadFile("finspector-raw.json", _rawJson);
+    }
+
+    private async Task DownloadNormalizedJson()
+    {
+        if (_statementResponse == null) return;
+        var normalized = StatementService.Normalize(_statementResponse);
+        var json = JsonSerializer.Serialize(normalized, new JsonSerializerOptions { WriteIndented = true });
+        await DownloadFile("finspector-normalized.json", json);
+    }
+
+    private async Task DownloadFile(string fileName, string content)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("downloadBase64File", fileName, "application/json", base64);
+    }
+
+    // ── Helper types ──────────────────────────────────────────────────────────
+
+    private class UploadedFile
+    {
+        public string Name { get; set; } = "";
+        public int SizeBytes { get; set; }
+        public byte[] Content { get; set; } = [];
+        public string? Password { get; set; }
+    }
+}
+
