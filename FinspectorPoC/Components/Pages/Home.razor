@@ -168,7 +168,7 @@
                 <dt class="col-sm-3">Result Code</dt>
                 <dd class="col-sm-9"><code>@_statementResponse.ResultCode</code></dd>
                 <dt class="col-sm-3">Message</dt>
-                <dd class="col-sm-9">@_statementResponse.ResultMessage</dd>
+                <dd class="col-sm-9">@_statementResponse.Message</dd>
                 <dt class="col-sm-3">Request ID</dt>
                 <dd class="col-sm-9"><small class="text-muted">@_statementResponse.RequestId</small></dd>
             </dl>
@@ -182,16 +182,14 @@
                     <dl class="row">
                         <dt class="col-sm-3">Period</dt>
                         <dd class="col-sm-9">@stmt.StatementFromDate – @stmt.StatementToDate</dd>
-                        <dt class="col-sm-3">Currency</dt>
-                        <dd class="col-sm-9">@stmt.Currency</dd>
                         <dt class="col-sm-3">Opening Balance</dt>
-                        <dd class="col-sm-9">@stmt.OpeningBalance?.ToString("N2")</dd>
+                        <dd class="col-sm-9">@stmt.OpeningBalance</dd>
                         <dt class="col-sm-3">Closing Balance</dt>
-                        <dd class="col-sm-9">@stmt.ClosingBalance?.ToString("N2")</dd>
+                        <dd class="col-sm-9">@stmt.ClosingBalance</dd>
                         <dt class="col-sm-3">Total Credits</dt>
-                        <dd class="col-sm-9 text-success">@stmt.TotalCredits?.ToString("N2")</dd>
+                        <dd class="col-sm-9 text-success">@stmt.TotalCredits</dd>
                         <dt class="col-sm-3">Total Debits</dt>
-                        <dd class="col-sm-9 text-danger">@stmt.TotalDebits?.ToString("N2")</dd>
+                        <dd class="col-sm-9 text-danger">@stmt.TotalDebits</dd>
                         @if (stmt.Tags?.Any() == true)
                         {
                             <dt class="col-sm-3">Tags</dt>
@@ -222,8 +220,8 @@
                                                 <td>@tx.Date</td>
                                                 <td>@tx.Description</td>
                                                 <td>@tx.Type</td>
-                                                <td class="text-end @(tx.Amount < 0 ? "text-danger" : "text-success")">@tx.Amount?.ToString("N2")</td>
-                                                <td class="text-end">@tx.Balance?.ToString("N2")</td>
+                                                <td class="text-end @(tx.Amount?.Value < 0 ? "text-danger" : "text-success")">@tx.Amount</td>
+                                                <td class="text-end">@tx.Balance</td>
                                                 <td><small>@(tx.Tags != null ? string.Join(", ", tx.Tags) : "")</small></td>
                                             </tr>
                                         }
@@ -352,12 +350,12 @@
             {
                 RequestId = Guid.NewGuid().ToString(),
                 CountryCode = _settings.CountryCode,
-                ReferenceNumber = string.IsNullOrWhiteSpace(_settings.ReferenceNumber) ? null : _settings.ReferenceNumber,
-                Documents = _uploadedFiles.Select(f => new StatementDocument
+                RefNo = string.IsNullOrWhiteSpace(_settings.ReferenceNumber) ? null : _settings.ReferenceNumber,
+                Files = _uploadedFiles.Select(f => new StatementFile
                 {
-                    DocumentId = Guid.NewGuid().ToString(),
-                    FileName = f.Name,
-                    FileContent = Convert.ToBase64String(f.Content),
+                    Name = f.Name,
+                    Type = "application/pdf",
+                    Content = Convert.ToBase64String(f.Content),
                     Password = string.IsNullOrWhiteSpace(f.Password) ? null : f.Password
                 }).ToList()
             };

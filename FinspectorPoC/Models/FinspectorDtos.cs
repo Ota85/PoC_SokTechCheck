@@ -21,45 +21,49 @@ public class TokenResponse
     public string? ErrorDescription { get; set; }
 }
 
-// Statement request
+// Statement request — matches Finspector OpenAPI
 public class StatementRequest
 {
     [JsonPropertyName("requestId")]
     public string RequestId { get; set; } = Guid.NewGuid().ToString();
 
     [JsonPropertyName("countryCode")]
-    public string CountryCode { get; set; } = "ZA";
+    public string CountryCode { get; set; } = "CZE";
 
-    [JsonPropertyName("referenceNumber")]
-    public string? ReferenceNumber { get; set; }
+    [JsonPropertyName("refNo")]
+    public string? RefNo { get; set; }
 
-    [JsonPropertyName("documents")]
-    public List<StatementDocument> Documents { get; set; } = [];
+    [JsonPropertyName("files")]
+    public List<StatementFile> Files { get; set; } = [];
 }
 
-public class StatementDocument
+public class StatementFile
 {
-    [JsonPropertyName("documentId")]
-    public string DocumentId { get; set; } = Guid.NewGuid().ToString();
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
 
-    [JsonPropertyName("fileName")]
-    public string FileName { get; set; } = "";
+    /// <summary>MIME type, e.g. "application/pdf"</summary>
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "application/pdf";
 
-    [JsonPropertyName("fileContent")]
-    public string FileContent { get; set; } = ""; // base64
+    /// <summary>Base64-encoded file content.</summary>
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = "";
 
     [JsonPropertyName("password")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? Password { get; set; }
 }
 
-// Statement response - provider DTOs
+// Statement response — provider DTOs matching Finspector OpenAPI
 public class StatementResponse
 {
+    /// <summary>Numeric result code (0 = success).</summary>
     [JsonPropertyName("resultCode")]
-    public string? ResultCode { get; set; }
+    public int? ResultCode { get; set; }
 
-    [JsonPropertyName("resultMessage")]
-    public string? ResultMessage { get; set; }
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
 
     [JsonPropertyName("requestId")]
     public string? RequestId { get; set; }
@@ -88,26 +92,35 @@ public class StatementResult
     [JsonPropertyName("statementToDate")]
     public string? StatementToDate { get; set; }
 
-    [JsonPropertyName("currency")]
-    public string? Currency { get; set; }
-
     [JsonPropertyName("openingBalance")]
-    public decimal? OpeningBalance { get; set; }
+    public AmountValue? OpeningBalance { get; set; }
 
     [JsonPropertyName("closingBalance")]
-    public decimal? ClosingBalance { get; set; }
+    public AmountValue? ClosingBalance { get; set; }
 
     [JsonPropertyName("totalCredits")]
-    public decimal? TotalCredits { get; set; }
+    public AmountValue? TotalCredits { get; set; }
 
     [JsonPropertyName("totalDebits")]
-    public decimal? TotalDebits { get; set; }
+    public AmountValue? TotalDebits { get; set; }
 
     [JsonPropertyName("transactions")]
     public List<Transaction>? Transactions { get; set; }
 
     [JsonPropertyName("tags")]
     public List<string>? Tags { get; set; }
+}
+
+/// <summary>Amount object used for balances and totals (value + currency).</summary>
+public class AmountValue
+{
+    [JsonPropertyName("value")]
+    public decimal Value { get; set; }
+
+    [JsonPropertyName("currency")]
+    public string? Currency { get; set; }
+
+    public override string ToString() => $"{Value:N2} {Currency}".Trim();
 }
 
 public class Transaction
@@ -119,10 +132,10 @@ public class Transaction
     public string? Description { get; set; }
 
     [JsonPropertyName("amount")]
-    public decimal? Amount { get; set; }
+    public AmountValue? Amount { get; set; }
 
     [JsonPropertyName("balance")]
-    public decimal? Balance { get; set; }
+    public AmountValue? Balance { get; set; }
 
     [JsonPropertyName("type")]
     public string? Type { get; set; }
@@ -134,8 +147,8 @@ public class Transaction
 // Normalized result for download
 public class NormalizedResult
 {
-    public string? ResultCode { get; set; }
-    public string? ResultMessage { get; set; }
+    public int? ResultCode { get; set; }
+    public string? Message { get; set; }
     public string? RequestId { get; set; }
     public List<NormalizedStatement> Statements { get; set; } = [];
 }
@@ -155,3 +168,4 @@ public class NormalizedStatement
     public List<string>? Tags { get; set; }
     public List<Transaction>? Transactions { get; set; }
 }
+

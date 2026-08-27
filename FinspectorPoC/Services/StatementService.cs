@@ -43,7 +43,7 @@ public class StatementService(IHttpClientFactory httpClientFactory)
     public static NormalizedResult Normalize(StatementResponse response) => new()
     {
         ResultCode = response.ResultCode,
-        ResultMessage = response.ResultMessage,
+        Message = response.Message,
         RequestId = response.RequestId,
         Statements = response.Statements?.Select(s => new NormalizedStatement
         {
@@ -52,11 +52,14 @@ public class StatementService(IHttpClientFactory httpClientFactory)
             AccountNumber = s.AccountNumber,
             BankName = s.BankName,
             Period = $"{s.StatementFromDate} – {s.StatementToDate}",
-            Currency = s.Currency,
-            OpeningBalance = s.OpeningBalance,
-            ClosingBalance = s.ClosingBalance,
-            TotalCredits = s.TotalCredits,
-            TotalDebits = s.TotalDebits,
+            Currency = s.OpeningBalance?.Currency
+                       ?? s.ClosingBalance?.Currency
+                       ?? s.TotalCredits?.Currency
+                       ?? s.TotalDebits?.Currency,
+            OpeningBalance = s.OpeningBalance?.Value,
+            ClosingBalance = s.ClosingBalance?.Value,
+            TotalCredits = s.TotalCredits?.Value,
+            TotalDebits = s.TotalDebits?.Value,
             Tags = s.Tags,
             Transactions = s.Transactions
         }).ToList() ?? []
