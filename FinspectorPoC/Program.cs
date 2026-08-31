@@ -12,6 +12,7 @@ builder.Services.AddHttpClient("api");
 builder.Services.AddSingleton<LocalSettingsService>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<StatementService>();
+builder.Services.AddSingleton<Psd2Service>();
 
 var app = builder.Build();
 

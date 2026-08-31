@@ -1,0 +1,608 @@
+@page "/psd2"
+@rendermode InteractiveServer
+@using FinspectorPoC.Models
+@using FinspectorPoC.Services
+@using System.Text.Json
+@inject LocalSettingsService SettingsService
+@inject TokenService TokenSvc
+@inject Psd2Service Psd2Svc
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>PSD2 Open Banking – Finspector PoC</PageTitle>
+
+@* ─── Security Warning ─────────────────────────────────────────────────────── *@
+<div class="alert alert-danger mb-3" role="alert">
+    <strong>⚠️ LOCAL DEVELOPER POC ONLY</strong> — Credentials and tokens are stored/displayed locally
+    and are <strong>never encrypted</strong>. Do <strong>not</strong> deploy this publicly or commit
+    <code>appsettings.local.json</code> to source control.
+</div>
+
+@* ─── 1. Connection Settings ──────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>1. Connection Settings</strong>
+        <small class="text-muted">Config file: <code>@SettingsService.FilePath</code></small>
+    </div>
+    <div class="card-body">
+        <h6 class="text-muted">OAuth / API Foundation (shared with PDF page)</h6>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label">Base API URL</label>
+                <input class="form-control" @bind="_settings.BaseApiUrl" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Token URL</label>
+                <input class="form-control" @bind="_settings.TokenUrl" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Client ID</label>
+                <input class="form-control" @bind="_settings.ClientId" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Client Secret</label>
+                <input class="form-control" @bind="_settings.ClientSecret" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">OAuth Scope</label>
+                <input class="form-control" @bind="_settings.OAuthScope" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Country Code</label>
+                <input class="form-control" @bind="_settings.CountryCode" />
+            </div>
+        </div>
+
+        <hr class="my-3" />
+        <h6 class="text-muted">PSD2-specific Settings</h6>
+        <div class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label">Client Code <small class="text-muted">(SokordiaTech clientCode)</small></label>
+                <input class="form-control" @bind="_settings.ClientCode" />
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">Callback / Redirect URL</label>
+                <input class="form-control" @bind="_settings.Psd2CallbackUrl" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Banks endpoint path</label>
+                <input class="form-control" @bind="_settings.Psd2BanksPath" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Auth Init path</label>
+                <input class="form-control" @bind="_settings.Psd2AuthInitPath" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Accounts path</label>
+                <input class="form-control" @bind="_settings.Psd2AccountsPath" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Account Info path</label>
+                <input class="form-control" @bind="_settings.Psd2AccountInfoPath" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Transactions path</label>
+                <input class="form-control" @bind="_settings.Psd2TransactionsPath" />
+            </div>
+        </div>
+
+        <button class="btn btn-primary mt-3" @onclick="SaveSettings">💾 Save Settings</button>
+        @if (_settingsSaved) { <span class="ms-2 text-success">Saved ✓</span> }
+    </div>
+</div>
+
+@* ─── 2. ****** Panel (shared) ──────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>2. ****** Panel</strong></div>
+    <div class="card-body">
+        <div class="d-flex gap-2 flex-wrap mb-3">
+            <button class="btn btn-success" @onclick="GetNewToken" disabled="@_tokenBusy">
+                @(_tokenBusy ? "Requesting…" : "🔑 Get New Token")
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="UseSavedToken" disabled="@(string.IsNullOrWhiteSpace(_settings.SavedToken))">
+                ♻️ Use Saved Token
+            </button>
+            <button class="btn btn-outline-danger" @onclick="ClearToken" disabled="@(string.IsNullOrWhiteSpace(_settings.SavedToken))">
+                🗑 Clear Saved Token
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(_tokenError)) { <div class="alert alert-danger">@_tokenError</div> }
+        @if (!string.IsNullOrWhiteSpace(_activeToken))
+        {
+            <div class="mb-2">
+                <label class="form-label fw-semibold">Active ******</label>
+                <textarea class="form-control font-monospace" rows="3" readonly>@_activeToken</textarea>
+            </div>
+            <div>
+                <label class="form-label fw-semibold">Expiry</label>
+                <input class="form-control" readonly value="@(_settings.TokenExpiry?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")" />
+                @if (_settings.TokenExpiry < DateTimeOffset.UtcNow)
+                { <span class="text-danger ms-2">Token expired!</span> }
+                else
+                { <span class="text-success ms-2">Valid ✓</span> }
+            </div>
+        }
+    </div>
+</div>
+
+@* ─── 3. PSD2 Tokens ──────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>3. PSD2 Tokens &amp; Consent</strong></div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-12">
+                <label class="form-label fw-semibold">Consent ID <small class="text-muted">(set automatically after auth-init)</small></label>
+                <input class="form-control font-monospace" @bind="_settings.Psd2ConsentId" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">PSD2 Access Token <small class="text-muted">(short-lived, from callback/auth)</small></label>
+                <textarea class="form-control font-monospace" rows="2" @bind="_settings.Psd2AccessToken"></textarea>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">PSD2 Access Token Expiry</label>
+                <input class="form-control" @bind="_psd2AccessTokenExpiryStr" placeholder="yyyy-MM-ddTHH:mm:ssZ" />
+                @if (_settings.Psd2AccessTokenExpiry.HasValue)
+                {
+                    @if (_settings.Psd2AccessTokenExpiry < DateTimeOffset.UtcNow)
+                    { <small class="text-danger">Expired!</small> }
+                    else
+                    { <small class="text-success">Valid ✓ (expires @_settings.Psd2AccessTokenExpiry.Value.ToLocalTime().ToString("HH:mm:ss zzz"))</small> }
+                }
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">PSD2 Refresh Token</label>
+                <textarea class="form-control font-monospace" rows="2" @bind="_settings.Psd2RefreshToken"></textarea>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">PSD2 Refresh Token Expiry</label>
+                <input class="form-control" @bind="_psd2RefreshTokenExpiryStr" placeholder="yyyy-MM-ddTHH:mm:ssZ" />
+                @if (_settings.Psd2RefreshTokenExpiry.HasValue)
+                {
+                    @if (_settings.Psd2RefreshTokenExpiry < DateTimeOffset.UtcNow)
+                    { <small class="text-danger">Expired!</small> }
+                    else
+                    { <small class="text-success">Valid ✓</small> }
+                }
+            </div>
+        </div>
+        <button class="btn btn-primary mt-3" @onclick="SavePsd2Tokens">💾 Save PSD2 Tokens</button>
+        <button class="btn btn-outline-danger mt-3 ms-2" @onclick="ClearPsd2Tokens">🗑 Clear PSD2 Tokens</button>
+        @if (_psd2TokensSaved) { <span class="ms-2 text-success">Saved ✓</span> }
+    </div>
+</div>
+
+@* ─── 4. Load Banks ───────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>4. Step 1 – Load Available Banks</strong></div>
+    <div class="card-body">
+        <button class="btn btn-primary" @onclick="LoadBanks" disabled="@_banksBusy">
+            @(_banksBusy ? "Loading…" : "🏦 Load Banks")
+        </button>
+        @if (!string.IsNullOrEmpty(_banksError)) { <div class="alert alert-danger mt-2">@_banksError</div> }
+
+        @RawResponseCard("Banks", _banksStatus, _banksRaw, "psd2-banks.json")
+
+        @if (_banks?.Any() == true)
+        {
+            <div class="mt-3">
+                <label class="form-label fw-semibold">Choose a Bank</label>
+                <select class="form-select" @bind="_selectedBankId">
+                    <option value="">— select —</option>
+                    @foreach (var b in _banks)
+                    {
+                        <option value="@b.BankId">@b.Name (@b.BankId) @(b.CountryCode)</option>
+                    }
+                </select>
+            </div>
+        }
+    </div>
+</div>
+
+@* ─── 5. Init Authorization ───────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>5. Step 2 – Start Authorization</strong></div>
+    <div class="card-body">
+        <button class="btn btn-primary" @onclick="InitAuth" disabled="@(string.IsNullOrWhiteSpace(_selectedBankId) || _authBusy)">
+            @(_authBusy ? "Initiating…" : "🔐 Start Authorization")
+        </button>
+        @if (!string.IsNullOrEmpty(_authError)) { <div class="alert alert-danger mt-2">@_authError</div> }
+
+        @RawResponseCard("Auth Init", _authStatus, _authRaw, "psd2-auth-init.json")
+
+        @if (!string.IsNullOrWhiteSpace(_authorizationUrl))
+        {
+            <div class="alert alert-info mt-3">
+                <strong>Authorization URL returned.</strong>
+                Consent ID: <code>@_settings.Psd2ConsentId</code>
+                <br />
+                <a href="@_authorizationUrl" target="_blank" class="btn btn-warning mt-2">🌐 Open Authorization URL in New Tab</a>
+                <small class="d-block mt-1 text-muted">After authorizing, return here and paste any tokens/codes provided by the callback into section 3, then proceed to Load Accounts.</small>
+            </div>
+        }
+    </div>
+</div>
+
+@* ─── 6. Load Accounts ────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>6. Step 3 – Load Accounts</strong></div>
+    <div class="card-body">
+        <p class="text-muted small">Requires Consent ID and (optionally) PSD2 Access Token from section 3.</p>
+        <button class="btn btn-primary" @onclick="LoadAccounts" disabled="@(string.IsNullOrWhiteSpace(_settings.Psd2ConsentId) || _accountsBusy)">
+            @(_accountsBusy ? "Loading…" : "📋 Load Accounts")
+        </button>
+        @if (!string.IsNullOrEmpty(_accountsError)) { <div class="alert alert-danger mt-2">@_accountsError</div> }
+
+        @RawResponseCard("Accounts", _accountsStatus, _accountsRaw, "psd2-accounts.json")
+
+        @if (_accounts?.Any() == true)
+        {
+            <div class="mt-3">
+                <label class="form-label fw-semibold">Choose an Account</label>
+                <select class="form-select" @bind="_selectedAccountId">
+                    <option value="">— select —</option>
+                    @foreach (var a in _accounts)
+                    {
+                        <option value="@a.AccountId">@(a.Iban ?? a.AccountId) – @a.Name @a.Currency (@a.Status)</option>
+                    }
+                </select>
+            </div>
+        }
+    </div>
+</div>
+
+@* ─── 7. Account Info ─────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>7. Step 4 – Account Info</strong></div>
+    <div class="card-body">
+        <button class="btn btn-primary" @onclick="LoadAccountInfo" disabled="@(string.IsNullOrWhiteSpace(_selectedAccountId) || _accountInfoBusy)">
+            @(_accountInfoBusy ? "Loading…" : "ℹ️ Load Account Info")
+        </button>
+        @if (!string.IsNullOrEmpty(_accountInfoError)) { <div class="alert alert-danger mt-2">@_accountInfoError</div> }
+
+        @RawResponseCard("Account Info", _accountInfoStatus, _accountInfoRaw, "psd2-account-info.json")
+
+        @if (_accountInfo?.Account != null)
+        {
+            var acc = _accountInfo.Account;
+            <dl class="row mt-3 mb-0">
+                <dt class="col-sm-3">Account ID</dt><dd class="col-sm-9"><code>@acc.AccountId</code></dd>
+                <dt class="col-sm-3">IBAN</dt><dd class="col-sm-9">@acc.Iban</dd>
+                <dt class="col-sm-3">Currency</dt><dd class="col-sm-9">@acc.Currency</dd>
+                <dt class="col-sm-3">Name</dt><dd class="col-sm-9">@acc.Name</dd>
+                <dt class="col-sm-3">Product</dt><dd class="col-sm-9">@acc.Product</dd>
+                <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@acc.Status</dd>
+            </dl>
+            @if (acc.Balances?.Any() == true)
+            {
+                <table class="table table-sm mt-2">
+                    <thead><tr><th>Balance Type</th><th class="text-end">Amount</th><th>Reference Date</th></tr></thead>
+                    <tbody>
+                        @foreach (var b in acc.Balances)
+                        {
+                            <tr>
+                                <td>@b.BalanceType</td>
+                                <td class="text-end">@b.Amount</td>
+                                <td>@b.ReferenceDate</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+</div>
+
+@* ─── 8. Transactions ─────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+    <div class="card-header"><strong>8. Step 5 – Transactions</strong></div>
+    <div class="card-body">
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <label class="form-label">Date From <small class="text-muted">(yyyy-MM-dd)</small></label>
+                <input class="form-control" @bind="_txDateFrom" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Date To <small class="text-muted">(yyyy-MM-dd)</small></label>
+                <input class="form-control" @bind="_txDateTo" />
+            </div>
+        </div>
+        <button class="btn btn-primary" @onclick="LoadTransactions" disabled="@(string.IsNullOrWhiteSpace(_selectedAccountId) || _txBusy)">
+            @(_txBusy ? "Loading…" : "📊 Load Transactions")
+        </button>
+        @if (!string.IsNullOrEmpty(_txError)) { <div class="alert alert-danger mt-2">@_txError</div> }
+
+        @RawResponseCard("Transactions", _txStatus, _txRaw, "psd2-transactions.json")
+
+        @if (_transactions?.Any() == true)
+        {
+            <details class="mt-3" open>
+                <summary class="fw-semibold">Transactions (@_transactions.Count)</summary>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>Booking Date</th>
+                                <th>Value Date</th>
+                                <th class="text-end">Amount</th>
+                                <th>Creditor / Debtor</th>
+                                <th>Remittance Info</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tx in _transactions)
+                            {
+                                <tr>
+                                    <td>@tx.BookingDate</td>
+                                    <td>@tx.ValueDate</td>
+                                    <td class="text-end @(tx.Amount?.Value < 0 ? "text-danger" : "text-success")">@tx.Amount</td>
+                                    <td>@(tx.CreditorName ?? tx.DebtorName)</td>
+                                    <td><small>@tx.RemittanceInformation</small></td>
+                                    <td>@tx.Status</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    </div>
+</div>
+
+@code {
+    private AppSettings _settings = new();
+    private bool _settingsSaved;
+
+    // ****** (shared OAuth token)
+    private string? _activeToken;
+    private bool _tokenBusy;
+    private string? _tokenError;
+
+    // PSD2 token UI helpers
+    private string? _psd2AccessTokenExpiryStr;
+    private string? _psd2RefreshTokenExpiryStr;
+    private bool _psd2TokensSaved;
+
+    // Banks
+    private List<Psd2Bank>? _banks;
+    private string? _selectedBankId;
+    private bool _banksBusy;
+    private string? _banksError;
+    private int? _banksStatus;
+    private string? _banksRaw;
+
+    // Auth
+    private string? _authorizationUrl;
+    private bool _authBusy;
+    private string? _authError;
+    private int? _authStatus;
+    private string? _authRaw;
+
+    // Accounts
+    private List<Psd2Account>? _accounts;
+    private string? _selectedAccountId;
+    private bool _accountsBusy;
+    private string? _accountsError;
+    private int? _accountsStatus;
+    private string? _accountsRaw;
+
+    // Account info
+    private Psd2AccountInfoResponse? _accountInfo;
+    private bool _accountInfoBusy;
+    private string? _accountInfoError;
+    private int? _accountInfoStatus;
+    private string? _accountInfoRaw;
+
+    // Transactions
+    private List<Psd2Transaction>? _transactions;
+    private bool _txBusy;
+    private string? _txError;
+    private int? _txStatus;
+    private string? _txRaw;
+    private string? _txDateFrom;
+    private string? _txDateTo;
+
+    protected override void OnInitialized()
+    {
+        _settings = SettingsService.Load();
+        _psd2AccessTokenExpiryStr = _settings.Psd2AccessTokenExpiry?.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        _psd2RefreshTokenExpiryStr = _settings.Psd2RefreshTokenExpiry?.ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
+
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    private void SaveSettings()
+    {
+        SettingsService.Save(_settings);
+        _settingsSaved = true;
+        Task.Delay(2000).ContinueWith(_ => { _settingsSaved = false; InvokeAsync(StateHasChanged); });
+    }
+
+    // ── ****** ──────────────────────────────────────────────────────────
+
+    private async Task GetNewToken()
+    {
+        _tokenBusy = true; _tokenError = null;
+        try { _activeToken = await TokenSvc.RequestNewTokenAsync(_settings); }
+        catch (Exception ex) { _tokenError = ex.Message; }
+        finally { _tokenBusy = false; }
+    }
+
+    private void UseSavedToken()
+    {
+        _tokenError = null;
+        if (string.IsNullOrWhiteSpace(_settings.SavedToken)) { _tokenError = "No saved token found."; return; }
+        if (_settings.TokenExpiry <= DateTimeOffset.UtcNow) { _tokenError = "Saved token has expired. Get a new token."; return; }
+        _activeToken = _settings.SavedToken;
+    }
+
+    private void ClearToken()
+    {
+        _settings.SavedToken = null; _settings.TokenExpiry = null; _activeToken = null;
+        SettingsService.Save(_settings);
+    }
+
+    // ── PSD2 tokens ───────────────────────────────────────────────────────────
+
+    private void SavePsd2Tokens()
+    {
+        if (DateTimeOffset.TryParse(_psd2AccessTokenExpiryStr, out var ae)) _settings.Psd2AccessTokenExpiry = ae;
+        if (DateTimeOffset.TryParse(_psd2RefreshTokenExpiryStr, out var re)) _settings.Psd2RefreshTokenExpiry = re;
+        SettingsService.Save(_settings);
+        _psd2TokensSaved = true;
+        Task.Delay(2000).ContinueWith(_ => { _psd2TokensSaved = false; InvokeAsync(StateHasChanged); });
+    }
+
+    private void ClearPsd2Tokens()
+    {
+        _settings.Psd2ConsentId = null;
+        _settings.Psd2AccessToken = null; _settings.Psd2AccessTokenExpiry = null;
+        _settings.Psd2RefreshToken = null; _settings.Psd2RefreshTokenExpiry = null;
+        _psd2AccessTokenExpiryStr = null; _psd2RefreshTokenExpiryStr = null;
+        SettingsService.Save(_settings);
+    }
+
+    // ── Banks ─────────────────────────────────────────────────────────────────
+
+    private async Task LoadBanks()
+    {
+        _banksBusy = true; _banksError = null; _banksRaw = null; _banksStatus = null;
+        try
+        {
+            await EnsureTokenAsync();
+            (_banksStatus, _banksRaw, var typed) = await Psd2Svc.GetBanksAsync(_settings, _activeToken!);
+            _banks = typed?.Banks;
+            if (_banksStatus is not (>= 200 and < 300)) _banksError = $"HTTP {_banksStatus} — see raw response.";
+        }
+        catch (Exception ex) { _banksError = ex.Message; }
+        finally { _banksBusy = false; }
+    }
+
+    // ── Auth init ─────────────────────────────────────────────────────────────
+
+    private async Task InitAuth()
+    {
+        _authBusy = true; _authError = null; _authRaw = null; _authStatus = null; _authorizationUrl = null;
+        try
+        {
+            await EnsureTokenAsync();
+            (_authStatus, _authRaw, var typed) = await Psd2Svc.InitAuthAsync(_settings, _activeToken!, _selectedBankId!);
+            _authorizationUrl = typed?.AuthorizationUrl;
+            if (_authStatus is not (>= 200 and < 300)) _authError = $"HTTP {_authStatus} — see raw response.";
+        }
+        catch (Exception ex) { _authError = ex.Message; }
+        finally { _authBusy = false; }
+    }
+
+    // ── Accounts ─────────────────────────────────────────────────────────────
+
+    private async Task LoadAccounts()
+    {
+        _accountsBusy = true; _accountsError = null; _accountsRaw = null; _accountsStatus = null;
+        try
+        {
+            await EnsureTokenAsync();
+            (_accountsStatus, _accountsRaw, var typed) = await Psd2Svc.GetAccountsAsync(_settings, _activeToken!);
+            _accounts = typed?.Accounts;
+            if (_accountsStatus is not (>= 200 and < 300)) _accountsError = $"HTTP {_accountsStatus} — see raw response.";
+        }
+        catch (Exception ex) { _accountsError = ex.Message; }
+        finally { _accountsBusy = false; }
+    }
+
+    // ── Account info ──────────────────────────────────────────────────────────
+
+    private async Task LoadAccountInfo()
+    {
+        _accountInfoBusy = true; _accountInfoError = null; _accountInfoRaw = null; _accountInfoStatus = null; _accountInfo = null;
+        try
+        {
+            await EnsureTokenAsync();
+            (_accountInfoStatus, _accountInfoRaw, _accountInfo) = await Psd2Svc.GetAccountInfoAsync(_settings, _activeToken!, _selectedAccountId!);
+            if (_accountInfoStatus is not (>= 200 and < 300)) _accountInfoError = $"HTTP {_accountInfoStatus} — see raw response.";
+        }
+        catch (Exception ex) { _accountInfoError = ex.Message; }
+        finally { _accountInfoBusy = false; }
+    }
+
+    // ── Transactions ──────────────────────────────────────────────────────────
+
+    private async Task LoadTransactions()
+    {
+        _txBusy = true; _txError = null; _txRaw = null; _txStatus = null; _transactions = null;
+        try
+        {
+            await EnsureTokenAsync();
+            (_txStatus, _txRaw, var typed) = await Psd2Svc.GetTransactionsAsync(_settings, _activeToken!, _selectedAccountId!, _txDateFrom, _txDateTo);
+            _transactions = typed?.Transactions;
+            if (_txStatus is not (>= 200 and < 300)) _txError = $"HTTP {_txStatus} — see raw response.";
+        }
+        catch (Exception ex) { _txError = ex.Message; }
+        finally { _txBusy = false; }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private async Task EnsureTokenAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_activeToken) && _settings.TokenExpiry > DateTimeOffset.UtcNow) return;
+        _activeToken = await TokenSvc.GetValidTokenAsync(_settings, forceNew: false);
+    }
+
+    private async Task DownloadRaw(string fileName, string? content)
+    {
+        if (string.IsNullOrEmpty(content)) return;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("downloadBase64File", fileName, "application/json", base64);
+    }
+
+    // ── Reusable raw-response card fragment ───────────────────────────────────
+
+    private RenderFragment RawResponseCard(string label, int? status, string? raw, string fileName) => __builder =>
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return;
+
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "card mt-3");
+
+        // Header
+        __builder.OpenElement(2, "div");
+        __builder.AddAttribute(3, "class", "card-header d-flex justify-content-between align-items-center");
+
+        __builder.OpenElement(4, "span");
+        __builder.OpenElement(5, "strong");
+        __builder.AddContent(6, $"Raw Response – {label}");
+        __builder.CloseElement();
+        if (status.HasValue)
+        {
+            var cls = status is >= 200 and < 300 ? "bg-success" : "bg-danger";
+            __builder.OpenElement(7, "span");
+            __builder.AddAttribute(8, "class", $"badge {cls} ms-2");
+            __builder.AddContent(9, $"HTTP {status}");
+            __builder.CloseElement();
+        }
+        __builder.CloseElement(); // span
+
+        // Download button
+        __builder.OpenElement(10, "button");
+        __builder.AddAttribute(11, "class", "btn btn-sm btn-outline-secondary");
+        __builder.AddAttribute(12, "onclick", EventCallback.Factory.Create(this, async () => await DownloadRaw(fileName, raw)));
+        __builder.AddContent(13, "⬇ Raw JSON");
+        __builder.CloseElement();
+
+        __builder.CloseElement(); // card-header
+
+        // Body
+        __builder.OpenElement(14, "div");
+        __builder.AddAttribute(15, "class", "card-body p-0");
+        __builder.OpenElement(16, "pre");
+        __builder.AddAttribute(17, "class", "m-0 p-3 bg-light border-0 rounded-bottom");
+        __builder.AddAttribute(18, "style", "max-height:400px;overflow:auto;font-size:0.78rem;");
+        __builder.AddContent(19, raw);
+        __builder.CloseElement(); // pre
+        __builder.CloseElement(); // card-body
+
+        __builder.CloseElement(); // card
+    };
+}
