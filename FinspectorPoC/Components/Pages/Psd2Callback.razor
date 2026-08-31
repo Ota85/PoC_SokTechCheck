@@ -111,8 +111,17 @@
 
             // Validate state
             var settings = SettingsService.Load();
-            if (!string.IsNullOrWhiteSpace(_callbackState))
+            // If we stored a state when initiating auth, the callback MUST echo it back.
+            // A missing or mismatched state means this callback cannot be trusted.
+            if (!string.IsNullOrWhiteSpace(settings.Psd2State))
             {
+                if (string.IsNullOrWhiteSpace(_callbackState))
+                {
+                    _error = "State parameter is missing from the callback. Expected a state value — rejecting callback to prevent CSRF.";
+                    _processing = false;
+                    InvokeAsync(StateHasChanged);
+                    return;
+                }
                 _stateValid = _callbackState == settings.Psd2State;
                 if (!_stateValid)
                 {
@@ -121,6 +130,11 @@
                     InvokeAsync(StateHasChanged);
                     return;
                 }
+            }
+            else if (!string.IsNullOrWhiteSpace(_callbackState))
+            {
+                // No state was stored locally, but one arrived — accept it as informational
+                _stateValid = false;
             }
 
             // Persist access_token if returned directly in the callback (implicit flow)
