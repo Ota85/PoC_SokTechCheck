@@ -54,3 +54,7 @@ CodeCoverage/
 # Local Finspector PoC settings (contains credentials – never commit)
 FinspectorPoC/appsettings.local.json
 
+# Visual Studio local workspace state and locally generated solution files
+.vs/
+*.slnx
+
