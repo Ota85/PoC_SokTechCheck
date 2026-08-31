@@ -1,0 +1,153 @@
+@page "/psd2/callback"
+@rendermode InteractiveServer
+@using FinspectorPoC.Models
+@using FinspectorPoC.Services
+@inject LocalSettingsService SettingsService
+@inject NavigationManager Nav
+
+<PageTitle>PSD2 Callback – Finspector PoC</PageTitle>
+
+<div class="container mt-4" style="max-width:680px">
+    @if (_processing)
+    {
+        <div class="alert alert-info">Processing authorization callback…</div>
+    }
+    else if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger">
+            <strong>Callback error:</strong> @_error
+        </div>
+        <a href="/psd2" class="btn btn-outline-secondary">← Back to PSD2 page</a>
+    }
+    else
+    {
+        <div class="alert alert-success">
+            <strong>Authorization callback received.</strong>
+            @if (!string.IsNullOrWhiteSpace(_code))
+            {
+                <div class="mt-2">
+                    <strong>Code / Token:</strong><br />
+                    <code class="text-break">@_code</code>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_callbackState))
+            {
+                <div class="mt-1"><strong>State:</strong> <code>@_callbackState</code>
+                @if (_stateValid)
+                { <span class="badge bg-success ms-2">Matched ✓</span> }
+                else
+                { <span class="badge bg-warning text-dark ms-2">State mismatch – value not used</span> }
+                </div>
+            }
+            <div class="mt-3">
+                <small class="text-muted">
+                    All values received have been captured below. Paste any access/refresh token
+                    into the <strong>PSD2 Tokens &amp; Consent</strong> panel on the PSD2 page and save.
+                </small>
+            </div>
+        </div>
+
+        @if (_allParams.Any())
+        {
+            <div class="card mb-3">
+                <div class="card-header"><strong>All callback parameters</strong></div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+                        <tbody>
+                            @foreach (var kv in _allParams)
+                            {
+                                <tr>
+                                    <td><code>@kv.Key</code></td>
+                                    <td class="text-break"><code>@kv.Value</code></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <a href="/psd2" class="btn btn-primary">← Back to PSD2 page</a>
+    }
+</div>
+
+@code {
+    private bool _processing = true;
+    private string? _error;
+    private string? _code;
+    private string? _callbackState;
+    private bool _stateValid;
+    private List<KeyValuePair<string, string>> _allParams = [];
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            var uri = new Uri(Nav.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
+            // Collect all query params for display
+            _allParams = query.AllKeys
+                .Where(k => k != null)
+                .Select(k => new KeyValuePair<string, string>(k!, query[k] ?? ""))
+                .ToList();
+
+            // Check for error from the bank
+            var errorParam = query["error"];
+            if (!string.IsNullOrWhiteSpace(errorParam))
+            {
+                var desc = query["error_description"] ?? "";
+                _error = string.IsNullOrWhiteSpace(desc) ? errorParam : $"{errorParam}: {desc}";
+                _processing = false;
+                InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            _code = query["code"] ?? query["access_token"] ?? query["token"];
+            _callbackState = query["state"];
+
+            // Validate state
+            var settings = SettingsService.Load();
+            if (!string.IsNullOrWhiteSpace(_callbackState))
+            {
+                _stateValid = _callbackState == settings.Psd2State;
+                if (!_stateValid)
+                {
+                    _error = $"State mismatch: received '{_callbackState}', expected '{settings.Psd2State}'. The callback may not belong to this authorization request.";
+                    _processing = false;
+                    InvokeAsync(StateHasChanged);
+                    return;
+                }
+            }
+
+            // Persist access_token if returned directly in the callback (implicit flow)
+            var accessToken = query["access_token"];
+            if (!string.IsNullOrWhiteSpace(accessToken))
+            {
+                settings.Psd2AccessToken = accessToken;
+
+                var expiresIn = query["expires_in"];
+                if (!string.IsNullOrWhiteSpace(expiresIn) && int.TryParse(expiresIn, out var seconds))
+                    settings.Psd2AccessTokenExpiry = DateTimeOffset.UtcNow.AddSeconds(seconds - 30);
+
+                var refreshToken = query["refresh_token"];
+                if (!string.IsNullOrWhiteSpace(refreshToken))
+                    settings.Psd2RefreshToken = refreshToken;
+
+                SettingsService.Save(settings);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _processing = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+}

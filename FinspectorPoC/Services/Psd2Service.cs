@@ -42,10 +42,11 @@ public class Psd2Service(IHttpClientFactory httpClientFactory, LocalSettingsServ
         using var resp = await client.PostAsJsonAsync(url, request, ct);
         var (httpStatus, rawJson, typed) = await ReadAsync<Psd2AuthInitResponse>(resp, ct);
 
-        // Persist consentId when available
-        if (typed?.ConsentId is { } cid)
+        // Persist consentId and state when available
+        if (typed?.ConsentId is { } cid || typed?.State is { } st)
         {
-            settings.Psd2ConsentId = cid;
+            if (typed?.ConsentId is { } consentId) settings.Psd2ConsentId = consentId;
+            if (typed?.State is { } state) settings.Psd2State = state;
             settingsService.Save(settings);
         }
 

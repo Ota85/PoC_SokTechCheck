@@ -17,7 +17,7 @@ public class AppSettings
 
     // ── PSD2 / Open Banking settings ─────────────────────────────────────────
     public string ClientCode { get; set; } = "";
-    public string Psd2CallbackUrl { get; set; } = "http://localhost:5000/psd2/callback";
+    public string Psd2CallbackUrl { get; set; } = "http://localhost:5042/psd2/callback";
     public string Psd2BanksPath { get; set; } = "/api/OpenBanking/banks";
     public string Psd2AuthInitPath { get; set; } = "/api/OpenBanking/auth/init";
     public string Psd2AccountsPath { get; set; } = "/api/OpenBanking/accounts";
@@ -26,6 +26,7 @@ public class AppSettings
 
     // Persisted PSD2 tokens / long-lived values returned by the provider
     public string? Psd2ConsentId { get; set; }
+    public string? Psd2State { get; set; }
     public string? Psd2AccessToken { get; set; }
     public DateTimeOffset? Psd2AccessTokenExpiry { get; set; }
     public string? Psd2RefreshToken { get; set; }

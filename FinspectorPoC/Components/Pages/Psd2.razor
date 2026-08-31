@@ -167,6 +167,7 @@
         </div>
         <button class="btn btn-primary mt-3" @onclick="SavePsd2Tokens">💾 Save PSD2 Tokens</button>
         <button class="btn btn-outline-danger mt-3 ms-2" @onclick="ClearPsd2Tokens">🗑 Clear PSD2 Tokens</button>
+        @if (_psd2TokensError != null) { <div class="alert alert-danger mt-2">@_psd2TokensError</div> }
         @if (_psd2TokensSaved) { <span class="ms-2 text-success">Saved ✓</span> }
     </div>
 </div>
@@ -214,9 +215,17 @@
             <div class="alert alert-info mt-3">
                 <strong>Authorization URL returned.</strong>
                 Consent ID: <code>@_settings.Psd2ConsentId</code>
+                @if (!string.IsNullOrWhiteSpace(_settings.Psd2State))
+                {
+                    <span class="ms-2">State: <code>@_settings.Psd2State</code> <small class="text-muted">(persisted — validated on callback)</small></span>
+                }
                 <br />
                 <a href="@_authorizationUrl" target="_blank" class="btn btn-warning mt-2">🌐 Open Authorization URL in New Tab</a>
-                <small class="d-block mt-1 text-muted">After authorizing, return here and paste any tokens/codes provided by the callback into section 3, then proceed to Load Accounts.</small>
+                <small class="d-block mt-1 text-muted">
+                    After authorizing, the bank will redirect to <code>@_settings.Psd2CallbackUrl</code>.
+                    The callback page validates the state and captures any returned tokens.
+                    Then return here and proceed to Load Accounts.
+                </small>
             </div>
         }
     </div>
@@ -362,6 +371,7 @@
     private string? _psd2AccessTokenExpiryStr;
     private string? _psd2RefreshTokenExpiryStr;
     private bool _psd2TokensSaved;
+    private string? _psd2TokensError;
 
     // Banks
     private List<Psd2Bank>? _banks;
@@ -446,8 +456,31 @@
 
     private void SavePsd2Tokens()
     {
-        if (DateTimeOffset.TryParse(_psd2AccessTokenExpiryStr, out var ae)) _settings.Psd2AccessTokenExpiry = ae;
-        if (DateTimeOffset.TryParse(_psd2RefreshTokenExpiryStr, out var re)) _settings.Psd2RefreshTokenExpiry = re;
+        _psd2TokensError = null;
+        var errors = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(_psd2AccessTokenExpiryStr))
+        {
+            if (DateTimeOffset.TryParse(_psd2AccessTokenExpiryStr, out var ae))
+                _settings.Psd2AccessTokenExpiry = ae;
+            else
+                errors.Add($"Invalid access token expiry: '{_psd2AccessTokenExpiryStr}'. Use yyyy-MM-ddTHH:mm:ssZ.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(_psd2RefreshTokenExpiryStr))
+        {
+            if (DateTimeOffset.TryParse(_psd2RefreshTokenExpiryStr, out var re))
+                _settings.Psd2RefreshTokenExpiry = re;
+            else
+                errors.Add($"Invalid refresh token expiry: '{_psd2RefreshTokenExpiryStr}'. Use yyyy-MM-ddTHH:mm:ssZ.");
+        }
+
+        if (errors.Any())
+        {
+            _psd2TokensError = string.Join(" ", errors);
+            return;
+        }
+
         SettingsService.Save(_settings);
         _psd2TokensSaved = true;
         Task.Delay(2000).ContinueWith(_ => { _psd2TokensSaved = false; InvokeAsync(StateHasChanged); });
@@ -471,8 +504,12 @@
         {
             await EnsureTokenAsync();
             (_banksStatus, _banksRaw, var typed) = await Psd2Svc.GetBanksAsync(_settings, _activeToken!);
-            _banks = typed?.Banks;
-            if (_banksStatus is not (>= 200 and < 300)) _banksError = $"HTTP {_banksStatus} — see raw response.";
+            if (_banksStatus is not (>= 200 and < 300))
+                _banksError = $"HTTP {_banksStatus} — see raw response.";
+            else if (typed is null)
+                _banksError = "Response received but could not be deserialized — see raw response.";
+            else
+                _banks = typed.Banks;
         }
         catch (Exception ex) { _banksError = ex.Message; }
         finally { _banksBusy = false; }
@@ -487,8 +524,24 @@
         {
             await EnsureTokenAsync();
             (_authStatus, _authRaw, var typed) = await Psd2Svc.InitAuthAsync(_settings, _activeToken!, _selectedBankId!);
-            _authorizationUrl = typed?.AuthorizationUrl;
-            if (_authStatus is not (>= 200 and < 300)) _authError = $"HTTP {_authStatus} — see raw response.";
+            if (_authStatus is not (>= 200 and < 300))
+            {
+                _authError = $"HTTP {_authStatus} — see raw response.";
+            }
+            else if (typed is null)
+            {
+                _authError = "Response received but could not be deserialized — see raw response.";
+            }
+            else if (string.IsNullOrWhiteSpace(typed.AuthorizationUrl))
+            {
+                _authError = "Authorization URL missing in response — see raw response.";
+            }
+            else
+            {
+                _authorizationUrl = typed.AuthorizationUrl;
+                // Reload settings to pick up persisted consentId/state saved by Psd2Service
+                _settings = SettingsService.Load();
+            }
         }
         catch (Exception ex) { _authError = ex.Message; }
         finally { _authBusy = false; }
@@ -503,8 +556,12 @@
         {
             await EnsureTokenAsync();
             (_accountsStatus, _accountsRaw, var typed) = await Psd2Svc.GetAccountsAsync(_settings, _activeToken!);
-            _accounts = typed?.Accounts;
-            if (_accountsStatus is not (>= 200 and < 300)) _accountsError = $"HTTP {_accountsStatus} — see raw response.";
+            if (_accountsStatus is not (>= 200 and < 300))
+                _accountsError = $"HTTP {_accountsStatus} — see raw response.";
+            else if (typed is null)
+                _accountsError = "Response received but could not be deserialized — see raw response.";
+            else
+                _accounts = typed.Accounts;
         }
         catch (Exception ex) { _accountsError = ex.Message; }
         finally { _accountsBusy = false; }
@@ -519,7 +576,10 @@
         {
             await EnsureTokenAsync();
             (_accountInfoStatus, _accountInfoRaw, _accountInfo) = await Psd2Svc.GetAccountInfoAsync(_settings, _activeToken!, _selectedAccountId!);
-            if (_accountInfoStatus is not (>= 200 and < 300)) _accountInfoError = $"HTTP {_accountInfoStatus} — see raw response.";
+            if (_accountInfoStatus is not (>= 200 and < 300))
+                _accountInfoError = $"HTTP {_accountInfoStatus} — see raw response.";
+            else if (_accountInfo is null)
+                _accountInfoError = "Response received but could not be deserialized — see raw response.";
         }
         catch (Exception ex) { _accountInfoError = ex.Message; }
         finally { _accountInfoBusy = false; }
@@ -534,8 +594,12 @@
         {
             await EnsureTokenAsync();
             (_txStatus, _txRaw, var typed) = await Psd2Svc.GetTransactionsAsync(_settings, _activeToken!, _selectedAccountId!, _txDateFrom, _txDateTo);
-            _transactions = typed?.Transactions;
-            if (_txStatus is not (>= 200 and < 300)) _txError = $"HTTP {_txStatus} — see raw response.";
+            if (_txStatus is not (>= 200 and < 300))
+                _txError = $"HTTP {_txStatus} — see raw response.";
+            else if (typed is null)
+                _txError = "Response received but could not be deserialized — see raw response.";
+            else
+                _transactions = typed.Transactions;
         }
         catch (Exception ex) { _txError = ex.Message; }
         finally { _txBusy = false; }
