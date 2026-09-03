@@ -62,7 +62,7 @@
 @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
 @if (!string.IsNullOrWhiteSpace(_raw))
 {
-    <div class="card mb-3"><div class="card-header"><strong>Latest provider response: @_responseLabel</strong><span class="badge @(IsSuccess ? "bg-success" : "bg-danger") ms-2">HTTP @_status</span></div><pre class="m-0 p-3 bg-light" style="max-height:420px;overflow:auto">@_raw</pre></div>
+    <div class="card mb-3"><div class="card-header"><strong>Latest provider response: @_responseLabel</strong><span class="badge @(IsSuccess ? "bg-success" : "bg-danger") ms-2">HTTP @_status</span></div><pre class="m-0 p-3 bg-light" style="max-width:100%;max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">@_raw</pre></div>
 }
 
 @code {
