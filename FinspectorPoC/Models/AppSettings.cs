@@ -17,7 +17,7 @@ public class AppSettings
 
     // ── PSD2 / Open Banking settings ─────────────────────────────────────────
     public string ClientCode { get; set; } = "";
-    public string Psd2CallbackUrl { get; set; } = "http://localhost:5042/psd2/callback";
+    public string Psd2CallbackUrl { get; set; } = "https://sign.revolving.dev.linksoft.cz/psd2/callback";
     public string Psd2ProvidersPath { get; set; } = "/api/ProviderList";
     public string Psd2AccountAuthPath { get; set; } = "/api/AccountAuth";
     public string Psd2AccountsPath { get; set; } = "/api/AccountList";

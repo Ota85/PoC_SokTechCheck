@@ -27,6 +27,8 @@
             link.click();
             document.body.removeChild(link);
         };
+        window.finspector = window.finspector || {};
+        window.finspector.getUserAgent = () => navigator.userAgent;
     </script>
 </body>
 

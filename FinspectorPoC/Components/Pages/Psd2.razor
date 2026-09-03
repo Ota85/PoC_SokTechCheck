@@ -5,6 +5,8 @@
 @inject LocalSettingsService SettingsService
 @inject TokenService TokenSvc
 @inject Psd2Service Psd2Svc
+@inject IJSRuntime JS
+@inject IHttpClientFactory HttpClientFactory
 
 <PageTitle>PSD2 Sandbox – Finspector PoC</PageTitle>
 
@@ -22,10 +24,10 @@
         <div class="col-md-2"><label class="form-label">OAuth Scope</label><input class="form-control" @bind="_settings.OAuthScope" /></div>
         <div class="col-md-2"><label class="form-label">Country</label><input class="form-control" @bind="_settings.CountryCode" /></div>
         <div class="col-md-4"><label class="form-label">Client Code <small class="text-muted">(applicant UUID; generated when blank)</small></label><input class="form-control" @bind="_settings.ClientCode" /></div>
-        <div class="col-md-8"><label class="form-label">Registered return URL <small class="text-muted">(the required <code>clientId</code> parameter is added automatically)</small></label><input class="form-control" @bind="_settings.Psd2CallbackUrl" /></div>
+        <div class="col-md-8"><label class="form-label">Return URL <small class="text-muted">(the required <code>clientId</code> parameter is added automatically)</small></label><input class="form-control" @bind="_settings.Psd2CallbackUrl" /></div>
         <div class="col-md-4"><label class="form-label">Reference number</label><input class="form-control" @bind="_settings.Psd2ReferenceNumber" /></div>
-        <div class="col-md-3"><label class="form-label">User IP</label><input class="form-control" @bind="_settings.Psd2UserIp" /></div>
-        <div class="col-md-5"><label class="form-label">User-agent</label><input class="form-control" @bind="_settings.Psd2UserBrowserAgent" /></div>
+        <div class="col-md-3"><label class="form-label">Public IPv4 <small class="text-muted">(bank user)</small></label><div class="input-group"><input class="form-control" @bind="_settings.Psd2UserIp" placeholder="e.g. 217.33.145.89" /><button class="btn btn-outline-secondary" @onclick="DetectPublicIp" disabled="@_detectingIp">@(_detectingIp ? "…" : "Detect")</button></div></div>
+        <div class="col-md-5"><label class="form-label">User-agent <small class="text-muted">(detected from this browser)</small></label><input class="form-control" @bind="_settings.Psd2UserBrowserAgent" readonly /></div>
         <div class="col-md-3"><label class="form-label">History days <small class="text-muted">(1-365)</small></label><input class="form-control" type="number" min="1" max="365" @bind="_settings.Psd2HistoryDays" /></div>
     </div>
     <button class="btn btn-primary mt-3" @onclick="SaveSettings">Save settings</button>
@@ -71,6 +73,7 @@
     private string? _token;
     private string? _tokenError;
     private bool _tokenBusy;
+    private bool _detectingIp;
     private bool _saved;
     private bool _busy;
     private string? _error;
@@ -86,10 +89,47 @@
 
     protected override void OnInitialized() => _settings = SettingsService.Load();
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _settings.Psd2UserBrowserAgent = await JS.InvokeAsync<string>("finspector.getUserAgent");
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void SaveSettings()
     {
         SettingsService.Save(_settings);
         _saved = true;
+    }
+
+    private async Task DetectPublicIp()
+    {
+        _detectingIp = true;
+        _error = null;
+        try
+        {
+            var response = (await HttpClientFactory.CreateClient("api")
+                .GetStringAsync("https://api.ipify.org")).Trim();
+            if (!System.Net.IPAddress.TryParse(response, out var address)
+                || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                _error = "The public-IP lookup did not return an IPv4 address.";
+                return;
+            }
+
+            _settings.Psd2UserIp = response;
+            SettingsService.Save(_settings);
+            _saved = true;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Could not detect the public IP. Enter it manually.";
+        }
+        finally
+        {
+            _detectingIp = false;
+        }
     }
 
     private async Task GetToken()
@@ -193,7 +233,7 @@
         if (!EnsureClientCode()) return false;
         if (!Uri.TryCreate(_settings.Psd2CallbackUrl, UriKind.Absolute, out _))
         {
-            _error = "Registered return URL must be an absolute URL registered with SokordiaTech.";
+            _error = "Return URL must be an absolute HTTP or HTTPS URL.";
             return false;
         }
         if (string.IsNullOrWhiteSpace(_settings.Psd2ReferenceNumber)

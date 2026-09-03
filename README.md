@@ -33,9 +33,8 @@ A small, self-contained Blazor Server application that lets a **local developer*
    cp appsettings.example.json appsettings.local.json
    ```
 
-   Edit `appsettings.local.json` with your sandbox Client ID, Client Secret, GUID client code, and registered
-   callback URL. The example defaults use the verified sandbox API and OAuth endpoints. Keep the values supplied
-   with your sandbox account if they differ.
+   Edit `appsettings.local.json` with your sandbox Client ID and Client Secret. The example defaults use the
+   verified sandbox API and OAuth endpoints. Keep the values supplied with your sandbox account if they differ.
 
    > The local settings file is read from and written to the application's **output directory** (e.g. `bin/Debug/net10.0/appsettings.local.json`). The UI shows the full path.
 
@@ -50,7 +49,18 @@ cd FinspectorPoC
 dotnet run
 ```
 
-Open your browser to `http://localhost:5042` (or the URL shown in the console).
+Open your browser to `http://localhost:5000` (or the URL shown in the console).
+
+### PSD2 callback test
+
+The default PSD2 return URL is `https://sign.revolving.dev.linksoft.cz/psd2/callback`.
+The existing Revolving test relay redirects it to `http://localhost:5000/psd2/callback`, preserving query
+parameters such as `clientId`. This is intended only for a local test where the PoC and bank authorization run
+in the same browser on the same computer. Do not run the DigiSign relay or DigiSign PoC on port 5000 at the same time.
+
+For the first PSD2 authorization, leave **Client Code** blank so the PoC creates it and use a reference such as
+`PSD2-POC-001`. The PoC detects the browser User-Agent. Use **Detect** next to Public IPv4 to query
+`api.ipify.org` for the public IPv4 of the computer running this local PoC.
 
 ## Local Settings File
 
