@@ -39,7 +39,7 @@ public class FinspectorDtoSerializationTests
 
         Assert.Equal("req-001", root.GetProperty("requestId").GetString());
         Assert.Equal("CZE", root.GetProperty("countryCode").GetString());
-        Assert.Equal("FromEndDate", root.GetProperty("calcLogic").GetString());
+        Assert.Equal(0, root.GetProperty("calcLogic").GetInt32());
         Assert.Equal("REF-123", root.GetProperty("refNo").GetString());
 
         var file = root.GetProperty("files")[0];

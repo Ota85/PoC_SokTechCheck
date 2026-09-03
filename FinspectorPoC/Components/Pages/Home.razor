@@ -154,7 +154,7 @@
 
 @* ─── 4. Results ──────────────────────────────────────────────────────────── *@
 @* The raw response card is shown whenever a call was made, regardless of success *@
-@if (!string.IsNullOrWhiteSpace(_rawJson))
+@if (_httpStatus.HasValue)
 {
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -169,7 +169,7 @@
             <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
         </div>
         <div class="card-body p-0">
-            <pre class="m-0 p-3 bg-light border-0 rounded-bottom" style="max-height:400px;overflow:auto;font-size:0.78rem;">@_rawJson</pre>
+            <pre class="m-0 p-3 bg-light border-0 rounded-bottom" style="max-height:400px;overflow:auto;font-size:0.78rem;">@(string.IsNullOrWhiteSpace(_rawJson) ? "<empty response body>" : _rawJson)</pre>
         </div>
     </div>
 }
@@ -378,7 +378,9 @@
             (_httpStatus, _rawJson, _statementResponse) = await StatementSvc.SubmitAsync(_settings, _activeToken, request);
 
             if (_httpStatus is not (>= 200 and < 300))
-                _parseError = $"HTTP {_httpStatus} — see raw response below.";
+                _parseError = string.IsNullOrWhiteSpace(_rawJson)
+                    ? $"HTTP {_httpStatus} — the provider returned an empty response body."
+                    : $"HTTP {_httpStatus} — see raw response below.";
             else if (_statementResponse is null)
                 _parseError = "Response received but could not be deserialized — see raw response below.";
             else if (_statementResponse.ResultCode is not 0)

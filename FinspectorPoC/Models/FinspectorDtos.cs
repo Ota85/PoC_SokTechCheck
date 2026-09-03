@@ -30,8 +30,9 @@ public class StatementRequest
     [JsonPropertyName("countryCode")]
     public string CountryCode { get; set; } = "CZE";
 
+    // MonthCalculationLogic: 0 = FromEndDate, 1 = FromUltimoDate.
     [JsonPropertyName("calcLogic")]
-    public string CalcLogic { get; set; } = "FromEndDate";
+    public int CalcLogic { get; set; } = 0;
 
     [JsonPropertyName("refNo")]
     public string? RefNo { get; set; }
