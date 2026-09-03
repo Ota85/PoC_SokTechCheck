@@ -166,9 +166,10 @@
                     <span class="badge @badgeClass ms-2">HTTP @_httpStatus</span>
                 }
             </span>
-            <div class="btn-group btn-group-sm">
-                <button class="btn btn-outline-secondary" @onclick="ToggleJsonFormatting">@(_showFormattedJson ? "Show Raw JSON" : "Format JSON")</button>
-                <button class="btn btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleJsonFormatting">@(_showFormattedJson ? "View Raw JSON" : "View Human-Readable JSON")</button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
+                <button class="btn btn-sm btn-outline-primary" @onclick="DownloadFormattedJson">⬇ Human-Readable JSON</button>
             </div>
         </div>
         <div class="card-body p-0">
@@ -401,6 +402,12 @@
     {
         if (string.IsNullOrEmpty(_rawJson)) return;
         await DownloadFile("finspector-raw.json", _rawJson);
+    }
+
+    private async Task DownloadFormattedJson()
+    {
+        if (string.IsNullOrWhiteSpace(_rawJson)) return;
+        await DownloadFile("finspector-formatted.json", FormatJson(_rawJson, formatted: true));
     }
 
     private void ToggleJsonFormatting() => _showFormattedJson = !_showFormattedJson;
