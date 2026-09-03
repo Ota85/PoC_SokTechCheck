@@ -2,12 +2,9 @@ namespace FinspectorPoC.Models;
 
 public class AppSettings
 {
-    public const string LocalMockBaseUrl = "http://localhost:5108";
-    public const string LocalMockClientId = "sokordiatech-development";
-    public const string LocalMockClientSecret = "synthetic-sokordiatech-client-secret";
-
     public string BaseApiUrl { get; set; } = "https://finspector.goodveri.online";
-    public string TokenUrl { get; set; } = "https://finspector.goodveri.online/connect/token";
+    // The OAuth authority is supplied with the sandbox credentials; the API host does not expose /connect/token.
+    public string TokenUrl { get; set; } = "";
     public string StatementPath { get; set; } = "/api/Statement";
     public string ClientId { get; set; } = "";
     public string ClientSecret { get; set; } = "";
@@ -22,32 +19,14 @@ public class AppSettings
     // ── PSD2 / Open Banking settings ─────────────────────────────────────────
     public string ClientCode { get; set; } = "";
     public string Psd2CallbackUrl { get; set; } = "http://localhost:5042/psd2/callback";
-    public string Psd2BanksPath { get; set; } = "/api/OpenBanking/banks";
-    public string Psd2AuthInitPath { get; set; } = "/api/OpenBanking/auth/init";
-    public string Psd2AccountsPath { get; set; } = "/api/OpenBanking/accounts";
-    public string Psd2AccountInfoPath { get; set; } = "/api/OpenBanking/accounts/{accountId}";
-    public string Psd2TransactionsPath { get; set; } = "/api/OpenBanking/accounts/{accountId}/transactions";
-
-    // Persisted PSD2 tokens / long-lived values returned by the provider
-    public string? Psd2ConsentId { get; set; }
-    public string? Psd2State { get; set; }
-    public string? Psd2AccessToken { get; set; }
-    public DateTimeOffset? Psd2AccessTokenExpiry { get; set; }
-    public string? Psd2RefreshToken { get; set; }
-    public DateTimeOffset? Psd2RefreshTokenExpiry { get; set; }
-
-    public void UseLocalSokordiaTechPdfMock()
-    {
-        BaseApiUrl = LocalMockBaseUrl;
-        TokenUrl = $"{LocalMockBaseUrl}/connect/token";
-        StatementPath = "/api/Statement";
-        ClientId = LocalMockClientId;
-        ClientSecret = LocalMockClientSecret;
-        OAuthScope = "finspector";
-        CountryCode = "CZE";
-        ReferenceNumber = "POC-LOCAL-MOCK";
-        SavedToken = null;
-        TokenExpiry = null;
-    }
+    public string Psd2ProvidersPath { get; set; } = "/api/ProviderList";
+    public string Psd2AccountAuthPath { get; set; } = "/api/AccountAuth";
+    public string Psd2AccountsPath { get; set; } = "/api/AccountList";
+    public string Psd2AccountInfoPath { get; set; } = "/api/AccountInfo";
+    public string Psd2RevokeAuthPath { get; set; } = "/api/RevokeAuth";
+    public string Psd2ReferenceNumber { get; set; } = "PSD2-POC";
+    public string Psd2UserIp { get; set; } = "127.0.0.1";
+    public string Psd2UserBrowserAgent { get; set; } = "FinspectorPoC/1.0";
+    public int Psd2Scope { get; set; } = 1;
 }
 

@@ -33,7 +33,9 @@ A small, self-contained Blazor Server application that lets a **local developer*
    cp appsettings.example.json appsettings.local.json
    ```
 
-   Edit `appsettings.local.json` with your actual Client ID, Client Secret, and (if needed) custom API/Token URLs.
+   Edit `appsettings.local.json` with your sandbox Client ID, Client Secret, OAuth scope, GUID client code,
+   registered callback URL, and token URL. The API host is `https://finspector.goodveri.online`, but it does
+   not expose the OAuth token endpoint; obtain that URL from SokordiaTech with the sandbox credentials.
 
    > The local settings file is read from and written to the application's **output directory** (e.g. `bin/Debug/net10.0/appsettings.local.json`). The UI shows the full path.
 
@@ -49,23 +51,6 @@ dotnet run
 ```
 
 Open your browser to `http://localhost:5042` (or the URL shown in the console).
-
-### Run against the ECUPK local SokordiaTech mock
-
-The ECUPK repository provides a deterministic mock that exercises the same PDF contract as the
-production integration. Start it in a separate terminal:
-
-```powershell
-cd C:\Projects\ECUPK_SocordiaTech\mocks\sokordiatech
-node src/server.js
-```
-
-When it reports that it is listening on port `5108`, open the PoC and select **Use ECUPK local
-PDF mock** in Connection Settings. The preset uses only synthetic credentials, clears any saved
-provider token, and configures the PDF route as `POST /api/Statement`. PSD2 uses different
-provider request contracts and is intentionally not changed by this PDF-only preset.
-
----
 
 ## Local Settings File
 

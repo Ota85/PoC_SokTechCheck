@@ -2,211 +2,101 @@ using System.Text.Json.Serialization;
 
 namespace FinspectorPoC.Models;
 
-// ── Banks ────────────────────────────────────────────────────────────────────
-
-public class Psd2BanksResponse
+// DTOs follow the public Sokordia/Finspector Swagger document.
+public sealed class ProviderListRequest
 {
-    [JsonPropertyName("resultCode")]
-    public int? ResultCode { get; set; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
-
-    [JsonPropertyName("banks")]
-    public List<Psd2Bank>? Banks { get; set; }
+    [JsonPropertyName("requestId")] public string RequestId { get; set; } = Guid.NewGuid().ToString();
+    [JsonPropertyName("countryCode")] public string CountryCode { get; set; } = "CZE";
 }
 
-public class Psd2Bank
+public sealed class ProviderListResponse
 {
-    [JsonPropertyName("bankId")]
-    public string? BankId { get; set; }
-
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-
-    [JsonPropertyName("countryCode")]
-    public string? CountryCode { get; set; }
-
-    [JsonPropertyName("bic")]
-    public string? Bic { get; set; }
-
-    [JsonPropertyName("logoUrl")]
-    public string? LogoUrl { get; set; }
-
-    [JsonPropertyName("supported")]
-    public bool? Supported { get; set; }
-
-    public override string ToString() => $"{Name} ({BankId})";
+    [JsonPropertyName("providers")] public List<Psd2Provider>? Providers { get; set; }
 }
 
-// ── Auth Init ────────────────────────────────────────────────────────────────
-
-public class Psd2AuthInitRequest
+public sealed class Psd2Provider
 {
-    [JsonPropertyName("bankId")]
-    public string BankId { get; set; } = "";
-
-    [JsonPropertyName("clientCode")]
-    public string ClientCode { get; set; } = "";
-
-    [JsonPropertyName("redirectUrl")]
-    public string RedirectUrl { get; set; } = "";
-
-    [JsonPropertyName("countryCode")]
-    public string CountryCode { get; set; } = "CZE";
+    [JsonPropertyName("countryCode")] public string? CountryCode { get; set; }
+    [JsonPropertyName("providerCode")] public string? ProviderCode { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("logo")] public string? Logo { get; set; }
 }
 
-public class Psd2AuthInitResponse
+public sealed class AccountAuthRequest
 {
-    [JsonPropertyName("resultCode")]
-    public int? ResultCode { get; set; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
-
-    [JsonPropertyName("authorizationUrl")]
-    public string? AuthorizationUrl { get; set; }
-
-    [JsonPropertyName("consentId")]
-    public string? ConsentId { get; set; }
-
-    [JsonPropertyName("state")]
-    public string? State { get; set; }
+    [JsonPropertyName("clientCode")] public string ClientCode { get; set; } = "";
+    [JsonPropertyName("providerCode")] public string ProviderCode { get; set; } = "";
+    [JsonPropertyName("returnUrl")] public string ReturnUrl { get; set; } = "";
+    [JsonPropertyName("requestId")] public string RequestId { get; set; } = Guid.NewGuid().ToString();
+    [JsonPropertyName("refNo")] public string RefNo { get; set; } = "";
+    [JsonPropertyName("countryCode")] public string CountryCode { get; set; } = "CZE";
+    [JsonPropertyName("userIp")] public string UserIp { get; set; } = "";
+    [JsonPropertyName("userBrowserAgent")] public string UserBrowserAgent { get; set; } = "";
+    [JsonPropertyName("scope")] public int Scope { get; set; } = 1;
 }
 
-// ── Accounts ─────────────────────────────────────────────────────────────────
-
-public class Psd2AccountsRequest
+public sealed class AccountAuthResponse
 {
-    [JsonPropertyName("consentId")]
-    public string ConsentId { get; set; } = "";
-
-    [JsonPropertyName("accessToken")]
-    public string? AccessToken { get; set; }
+    [JsonPropertyName("authenticated")] public bool Authenticated { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("authenticationUrl")] public string? AuthenticationUrl { get; set; }
 }
 
-public class Psd2AccountsResponse
+public sealed class AccountListRequest : ProviderRequestBase { }
+
+public sealed class AccountInfoRequest : ProviderRequestBase
 {
-    [JsonPropertyName("resultCode")]
-    public int? ResultCode { get; set; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
-
-    [JsonPropertyName("accounts")]
-    public List<Psd2Account>? Accounts { get; set; }
+    [JsonPropertyName("accountId")] public string? AccountId { get; set; }
+    [JsonPropertyName("days")] public int Days { get; set; } = 180;
+    [JsonPropertyName("calcLogic")] public int CalcLogic { get; set; } = 0;
 }
 
-public class Psd2Account
+public abstract class ProviderRequestBase
 {
-    [JsonPropertyName("accountId")]
-    public string? AccountId { get; set; }
-
-    [JsonPropertyName("iban")]
-    public string? Iban { get; set; }
-
-    [JsonPropertyName("currency")]
-    public string? Currency { get; set; }
-
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-
-    [JsonPropertyName("product")]
-    public string? Product { get; set; }
-
-    [JsonPropertyName("status")]
-    public string? Status { get; set; }
-
-    public override string ToString() => $"{Iban ?? AccountId} {Currency}".Trim();
+    [JsonPropertyName("clientCode")] public string ClientCode { get; set; } = "";
+    [JsonPropertyName("providerCode")] public string ProviderCode { get; set; } = "";
+    [JsonPropertyName("requestId")] public string RequestId { get; set; } = Guid.NewGuid().ToString();
+    [JsonPropertyName("refNo")] public string RefNo { get; set; } = "";
+    [JsonPropertyName("countryCode")] public string CountryCode { get; set; } = "CZE";
 }
 
-// ── Account Info ─────────────────────────────────────────────────────────────
-
-public class Psd2AccountInfoResponse
+public sealed class AccountListResponse
 {
-    [JsonPropertyName("resultCode")]
-    public int? ResultCode { get; set; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
-
-    [JsonPropertyName("account")]
-    public Psd2AccountDetail? Account { get; set; }
+    [JsonPropertyName("resultCode")] public int? ResultCode { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("accounts")] public List<Psd2Account>? Accounts { get; set; }
 }
 
-public class Psd2AccountDetail
+public sealed class Psd2Account
 {
-    [JsonPropertyName("accountId")]
-    public string? AccountId { get; set; }
-
-    [JsonPropertyName("iban")]
-    public string? Iban { get; set; }
-
-    [JsonPropertyName("currency")]
-    public string? Currency { get; set; }
-
-    [JsonPropertyName("name")]
-    public string? Name { get; set; }
-
-    [JsonPropertyName("product")]
-    public string? Product { get; set; }
-
-    [JsonPropertyName("status")]
-    public string? Status { get; set; }
-
-    [JsonPropertyName("balances")]
-    public List<Psd2Balance>? Balances { get; set; }
+    [JsonPropertyName("id")] public string? Id { get; set; }
+    [JsonPropertyName("accountName")] public string? AccountName { get; set; }
+    [JsonPropertyName("productName")] public string? ProductName { get; set; }
+    [JsonPropertyName("ownersNames")] public List<string>? OwnersNames { get; set; }
+    [JsonPropertyName("pispSuitable")] public bool PispSuitable { get; set; }
+    [JsonPropertyName("ibanCode")] public string? IbanCode { get; set; }
+    [JsonPropertyName("accountNumber")] public string? AccountNumber { get; set; }
+    [JsonPropertyName("creditDebitIndicator")] public string? CreditDebitIndicator { get; set; }
+    [JsonPropertyName("balanceType")] public string? BalanceType { get; set; }
+    [JsonPropertyName("balance")] public AmountValue? Balance { get; set; }
 }
 
-public class Psd2Balance
+public sealed class AccountInfoResponse
 {
-    [JsonPropertyName("balanceType")]
-    public string? BalanceType { get; set; }
-
-    [JsonPropertyName("amount")]
-    public AmountValue? Amount { get; set; }
-
-    [JsonPropertyName("referenceDate")]
-    public string? ReferenceDate { get; set; }
+    [JsonPropertyName("resultCode")] public int? ResultCode { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("statements")] public List<StatementResult>? Statements { get; set; }
 }
 
-// ── Transactions ─────────────────────────────────────────────────────────────
-
-public class Psd2TransactionsResponse
+public sealed class RevokeAuthRequest
 {
-    [JsonPropertyName("resultCode")]
-    public int? ResultCode { get; set; }
-
-    [JsonPropertyName("message")]
-    public string? Message { get; set; }
-
-    [JsonPropertyName("transactions")]
-    public List<Psd2Transaction>? Transactions { get; set; }
+    [JsonPropertyName("requestId")] public string RequestId { get; set; } = Guid.NewGuid().ToString();
+    [JsonPropertyName("refNo")] public string? RefNo { get; set; }
+    [JsonPropertyName("clientCode")] public string ClientCode { get; set; } = "";
 }
 
-public class Psd2Transaction
+public sealed class RevokeAuthResponse
 {
-    [JsonPropertyName("transactionId")]
-    public string? TransactionId { get; set; }
-
-    [JsonPropertyName("bookingDate")]
-    public string? BookingDate { get; set; }
-
-    [JsonPropertyName("valueDate")]
-    public string? ValueDate { get; set; }
-
-    [JsonPropertyName("amount")]
-    public AmountValue? Amount { get; set; }
-
-    [JsonPropertyName("creditorName")]
-    public string? CreditorName { get; set; }
-
-    [JsonPropertyName("debtorName")]
-    public string? DebtorName { get; set; }
-
-    [JsonPropertyName("remittanceInformation")]
-    public string? RemittanceInformation { get; set; }
-
-    [JsonPropertyName("status")]
-    public string? Status { get; set; }
+    [JsonPropertyName("code")] public int? Code { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
 }

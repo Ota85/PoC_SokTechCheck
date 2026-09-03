@@ -99,21 +99,6 @@ public class FinspectorDtoSerializationTests
         Assert.Equal("MY-REF", refNo);
     }
 
-    [Fact]
-    public void AppSettings_LocalPdfMockPresetUsesTheVerifiedMockContract()
-    {
-        var settings = new AppSettings();
-
-        settings.UseLocalSokordiaTechPdfMock();
-
-        Assert.Equal("http://localhost:5108", settings.BaseApiUrl);
-        Assert.Equal("http://localhost:5108/connect/token", settings.TokenUrl);
-        Assert.Equal("/api/Statement", settings.StatementPath);
-        Assert.Equal("sokordiatech-development", settings.ClientId);
-        Assert.Equal("finspector", settings.OAuthScope);
-        Assert.Null(settings.SavedToken);
-    }
-
     // ── Response deserialization ───────────────────────────────────────────────
 
     [Fact]
@@ -206,6 +191,43 @@ public class FinspectorDtoSerializationTests
         var json = """{ "resultCode": 1, "resultMessage": "old field", "message": null }""";
         var response = JsonSerializer.Deserialize<StatementResponse>(json);
         Assert.Null(response!.Message);
+    }
+
+    [Fact]
+    public void Psd2Defaults_MatchThePublishedSokordiaPaths()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal("/api/ProviderList", settings.Psd2ProvidersPath);
+        Assert.Equal("/api/AccountAuth", settings.Psd2AccountAuthPath);
+        Assert.Equal("/api/AccountList", settings.Psd2AccountsPath);
+        Assert.Equal("/api/AccountInfo", settings.Psd2AccountInfoPath);
+        Assert.Equal("/api/RevokeAuth", settings.Psd2RevokeAuthPath);
+    }
+
+    [Fact]
+    public void AccountAuthRequest_SerializesTheProviderRequiredFields()
+    {
+        var request = new AccountAuthRequest
+        {
+            ClientCode = "b29b498d-a3c2-4d90-a205-e15f5f8b5bd4",
+            ProviderCode = "CZ_TEST_BANK",
+            ReturnUrl = "http://localhost:5042/psd2/callback",
+            RefNo = "PSD2-POC",
+            UserIp = "127.0.0.1",
+            UserBrowserAgent = "FinspectorPoC/1.0",
+            Scope = 1
+        };
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(request));
+        var root = json.RootElement;
+
+        Assert.Equal("CZ_TEST_BANK", root.GetProperty("providerCode").GetString());
+        Assert.Equal("PSD2-POC", root.GetProperty("refNo").GetString());
+        Assert.Equal("127.0.0.1", root.GetProperty("userIp").GetString());
+        Assert.Equal(1, root.GetProperty("scope").GetInt32());
+        Assert.False(root.TryGetProperty("bankId", out _));
+        Assert.False(root.TryGetProperty("redirectUrl", out _));
     }
 
     /// <summary>

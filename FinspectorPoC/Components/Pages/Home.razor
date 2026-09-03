@@ -60,10 +60,6 @@
             </div>
         </div>
         <button class="btn btn-primary mt-3" @onclick="SaveSettings">💾 Save Settings</button>
-        <button class="btn btn-outline-secondary mt-3 ms-2" @onclick="UseLocalSokordiaTechPdfMock">Use ECUPK local PDF mock</button>
-        <small class="d-block mt-2 text-muted">
-            The local mock must be running at <code>http://localhost:5108</code>. This uses synthetic credentials and clears saved tokens.
-        </small>
         @if (_settingsSaved)
         {
             <span class="ms-2 text-success">Saved ✓</span>
@@ -284,15 +280,6 @@
         SettingsService.Save(_settings);
         _settingsSaved = true;
         Task.Delay(2000).ContinueWith(_ => { _settingsSaved = false; InvokeAsync(StateHasChanged); });
-    }
-
-    private void UseLocalSokordiaTechPdfMock()
-    {
-        _settings.UseLocalSokordiaTechPdfMock();
-        SettingsService.Save(_settings);
-        _activeToken = null;
-        _tokenError = null;
-        _settingsSaved = true;
     }
 
     // ── Token ─────────────────────────────────────────────────────────────────
