@@ -48,7 +48,22 @@ cd FinspectorPoC
 dotnet run
 ```
 
-Open your browser to `http://localhost:5000` (or the URL shown in the console).
+Open your browser to `http://localhost:5042` (or the URL shown in the console).
+
+### Run against the ECUPK local SokordiaTech mock
+
+The ECUPK repository provides a deterministic mock that exercises the same PDF contract as the
+production integration. Start it in a separate terminal:
+
+```powershell
+cd C:\Projects\ECUPK_SocordiaTech\mocks\sokordiatech
+node src/server.js
+```
+
+When it reports that it is listening on port `5108`, open the PoC and select **Use ECUPK local
+PDF mock** in Connection Settings. The preset uses only synthetic credentials, clears any saved
+provider token, and configures the PDF route as `POST /api/Statement`. PSD2 uses different
+provider request contracts and is intentionally not changed by this PDF-only preset.
 
 ---
 

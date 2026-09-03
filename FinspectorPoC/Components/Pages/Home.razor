@@ -60,6 +60,10 @@
             </div>
         </div>
         <button class="btn btn-primary mt-3" @onclick="SaveSettings">💾 Save Settings</button>
+        <button class="btn btn-outline-secondary mt-3 ms-2" @onclick="UseLocalSokordiaTechPdfMock">Use ECUPK local PDF mock</button>
+        <small class="d-block mt-2 text-muted">
+            The local mock must be running at <code>http://localhost:5108</code>. This uses synthetic credentials and clears saved tokens.
+        </small>
         @if (_settingsSaved)
         {
             <span class="ms-2 text-success">Saved ✓</span>
@@ -197,22 +201,24 @@
                 foreach (var stmt in _statementResponse.Statements)
                 {
                     <hr />
-                    <h5>@stmt.BankName — @stmt.AccountHolder (<code>@stmt.AccountNumber</code>)</h5>
+                    <h5>@stmt.AccountName — @stmt.Name (<code>@stmt.AccountNumber</code>)</h5>
                     <dl class="row">
+                        <dt class="col-sm-3">Bank code</dt>
+                        <dd class="col-sm-9">@stmt.BankCode</dd>
+                        <dt class="col-sm-3">Product</dt>
+                        <dd class="col-sm-9">@stmt.ProductName</dd>
+                        <dt class="col-sm-3">Trusted</dt>
+                        <dd class="col-sm-9">@(stmt.IsTrusted ? "Yes" : "No")</dd>
                         <dt class="col-sm-3">Period</dt>
-                        <dd class="col-sm-9">@stmt.StatementFromDate – @stmt.StatementToDate</dd>
-                        <dt class="col-sm-3">Opening Balance</dt>
-                        <dd class="col-sm-9">@stmt.OpeningBalance</dd>
-                        <dt class="col-sm-3">Closing Balance</dt>
-                        <dd class="col-sm-9">@stmt.ClosingBalance</dd>
-                        <dt class="col-sm-3">Total Credits</dt>
-                        <dd class="col-sm-9 text-success">@stmt.TotalCredits</dd>
-                        <dt class="col-sm-3">Total Debits</dt>
-                        <dd class="col-sm-9 text-danger">@stmt.TotalDebits</dd>
+                        <dd class="col-sm-9">@stmt.StartDate?.ToString("yyyy-MM-dd") – @stmt.EndDate?.ToString("yyyy-MM-dd")</dd>
+                        <dt class="col-sm-3">Start balance</dt>
+                        <dd class="col-sm-9">@stmt.StartBalance</dd>
+                        <dt class="col-sm-3">End balance</dt>
+                        <dd class="col-sm-9">@stmt.EndBalance</dd>
                         @if (stmt.Tags?.Any() == true)
                         {
                             <dt class="col-sm-3">Tags</dt>
-                            <dd class="col-sm-9">@string.Join(", ", stmt.Tags)</dd>
+                            <dd class="col-sm-9">@string.Join(", ", stmt.Tags.Select(tag => tag.Name))</dd>
                         }
                     </dl>
 
@@ -226,9 +232,8 @@
                                         <tr>
                                             <th>Date</th>
                                             <th>Description</th>
-                                            <th>Type</th>
                                             <th class="text-end">Amount</th>
-                                            <th class="text-end">Balance</th>
+                                            <th>Variable symbol</th>
                                             <th>Tags</th>
                                         </tr>
                                     </thead>
@@ -238,9 +243,8 @@
                                             <tr>
                                                 <td>@tx.Date</td>
                                                 <td>@tx.Description</td>
-                                                <td>@tx.Type</td>
                                                 <td class="text-end @(tx.Amount?.Value < 0 ? "text-danger" : "text-success")">@tx.Amount</td>
-                                                <td class="text-end">@tx.Balance</td>
+                                                <td>@tx.VariableSymbol</td>
                                                 <td><small>@(tx.Tags != null ? string.Join(", ", tx.Tags) : "")</small></td>
                                             </tr>
                                         }
@@ -280,6 +284,15 @@
         SettingsService.Save(_settings);
         _settingsSaved = true;
         Task.Delay(2000).ContinueWith(_ => { _settingsSaved = false; InvokeAsync(StateHasChanged); });
+    }
+
+    private void UseLocalSokordiaTechPdfMock()
+    {
+        _settings.UseLocalSokordiaTechPdfMock();
+        SettingsService.Save(_settings);
+        _activeToken = null;
+        _tokenError = null;
+        _settingsSaved = true;
     }
 
     // ── Token ─────────────────────────────────────────────────────────────────
@@ -381,6 +394,8 @@
                 _parseError = $"HTTP {_httpStatus} — see raw response below.";
             else if (_statementResponse is null)
                 _parseError = "Response received but could not be deserialized — see raw response below.";
+            else if (_statementResponse.ResultCode is not 0)
+                _parseError = $"Provider result code {_statementResponse.ResultCode}: {_statementResponse.Message ?? "no message"} — see raw response below.";
         }
         catch (Exception ex) { _parseError = ex.Message; }
         finally { _parseBusy = false; }

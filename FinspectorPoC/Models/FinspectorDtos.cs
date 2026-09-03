@@ -30,6 +30,9 @@ public class StatementRequest
     [JsonPropertyName("countryCode")]
     public string CountryCode { get; set; } = "CZE";
 
+    [JsonPropertyName("calcLogic")]
+    public string CalcLogic { get; set; } = "FromEndDate";
+
     [JsonPropertyName("refNo")]
     public string? RefNo { get; set; }
 
@@ -74,41 +77,56 @@ public class StatementResponse
 
 public class StatementResult
 {
-    [JsonPropertyName("documentId")]
-    public string? DocumentId { get; set; }
-
-    [JsonPropertyName("accountHolder")]
-    public string? AccountHolder { get; set; }
-
     [JsonPropertyName("accountNumber")]
     public string? AccountNumber { get; set; }
 
-    [JsonPropertyName("bankName")]
-    public string? BankName { get; set; }
+    [JsonPropertyName("bankCode")]
+    public string? BankCode { get; set; }
 
-    [JsonPropertyName("statementFromDate")]
-    public string? StatementFromDate { get; set; }
+    [JsonPropertyName("accountName")]
+    public string? AccountName { get; set; }
 
-    [JsonPropertyName("statementToDate")]
-    public string? StatementToDate { get; set; }
+    [JsonPropertyName("productName")]
+    public string? ProductName { get; set; }
 
-    [JsonPropertyName("openingBalance")]
-    public AmountValue? OpeningBalance { get; set; }
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 
-    [JsonPropertyName("closingBalance")]
-    public AmountValue? ClosingBalance { get; set; }
+    [JsonPropertyName("isTrusted")]
+    public bool IsTrusted { get; set; }
 
-    [JsonPropertyName("totalCredits")]
-    public AmountValue? TotalCredits { get; set; }
+    [JsonPropertyName("startDate")]
+    public DateTimeOffset? StartDate { get; set; }
 
-    [JsonPropertyName("totalDebits")]
-    public AmountValue? TotalDebits { get; set; }
+    [JsonPropertyName("endDate")]
+    public DateTimeOffset? EndDate { get; set; }
+
+    [JsonPropertyName("startBalance")]
+    public AmountValue? StartBalance { get; set; }
+
+    [JsonPropertyName("endBalance")]
+    public AmountValue? EndBalance { get; set; }
 
     [JsonPropertyName("transactions")]
     public List<Transaction>? Transactions { get; set; }
 
     [JsonPropertyName("tags")]
-    public List<string>? Tags { get; set; }
+    public List<StatementTag>? Tags { get; set; }
+}
+
+public class StatementTag
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("flag")]
+    public bool Flag { get; set; }
+
+    [JsonPropertyName("amount")]
+    public AmountValue? Amount { get; set; }
+
+    [JsonPropertyName("necessityAmount")]
+    public AmountValue? NecessityAmount { get; set; }
 }
 
 /// <summary>Amount object used for balances and totals (value + currency).</summary>
@@ -134,11 +152,23 @@ public class Transaction
     [JsonPropertyName("amount")]
     public AmountValue? Amount { get; set; }
 
-    [JsonPropertyName("balance")]
-    public AmountValue? Balance { get; set; }
+    [JsonPropertyName("text")]
+    public string? Text { get; set; }
 
-    [JsonPropertyName("type")]
-    public string? Type { get; set; }
+    [JsonPropertyName("accountNumber")]
+    public string? AccountNumber { get; set; }
+
+    [JsonPropertyName("message")]
+    public string? Message { get; set; }
+
+    [JsonPropertyName("vs")]
+    public string? VariableSymbol { get; set; }
+
+    [JsonPropertyName("ks")]
+    public string? ConstantSymbol { get; set; }
+
+    [JsonPropertyName("ss")]
+    public string? SpecificSymbol { get; set; }
 
     [JsonPropertyName("tags")]
     public List<string>? Tags { get; set; }
@@ -155,17 +185,17 @@ public class NormalizedResult
 
 public class NormalizedStatement
 {
-    public string? DocumentId { get; set; }
+    public string? BankCode { get; set; }
+    public string? AccountName { get; set; }
+    public string? ProductName { get; set; }
     public string? AccountHolder { get; set; }
     public string? AccountNumber { get; set; }
-    public string? BankName { get; set; }
     public string? Period { get; set; }
     public string? Currency { get; set; }
-    public decimal? OpeningBalance { get; set; }
-    public decimal? ClosingBalance { get; set; }
-    public decimal? TotalCredits { get; set; }
-    public decimal? TotalDebits { get; set; }
-    public List<string>? Tags { get; set; }
+    public bool IsTrusted { get; set; }
+    public decimal? StartBalance { get; set; }
+    public decimal? EndBalance { get; set; }
+    public List<StatementTag>? Tags { get; set; }
     public List<Transaction>? Transactions { get; set; }
 }
 

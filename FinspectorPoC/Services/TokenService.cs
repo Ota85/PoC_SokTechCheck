@@ -3,6 +3,30 @@ using FinspectorPoC.Models;
 
 namespace FinspectorPoC.Services;
 
+public sealed class TokenRequestException(string endpoint, int statusCode, string? reasonPhrase, string responseBody)
+    : HttpRequestException(CreateMessage(endpoint, statusCode, reasonPhrase, responseBody))
+{
+    private const int MaximumDiagnosticBodyLength = 4_000;
+
+    private static string CreateMessage(string endpoint, int statusCode, string? reasonPhrase, string responseBody)
+    {
+        var body = string.IsNullOrWhiteSpace(responseBody)
+            ? "<empty response body>"
+            : responseBody.Trim();
+        if (body.Length > MaximumDiagnosticBodyLength)
+            body = body[..MaximumDiagnosticBodyLength] + "… <truncated>";
+
+        return $"Token request failed: POST {SafeEndpoint(endpoint)} returned HTTP {statusCode}"
+             + $"{(string.IsNullOrWhiteSpace(reasonPhrase) ? string.Empty : $" ({reasonPhrase})")}."
+             + $" Provider response: {body}";
+    }
+
+    private static string SafeEndpoint(string endpoint) =>
+        Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            ? uri.GetLeftPart(UriPartial.Path)
+            : "<invalid configured token URL>";
+}
+
 /// <summary>
 /// Handles OAuth client-credentials token acquisition and caching.
 /// </summary>
@@ -39,7 +63,7 @@ public class TokenService(IHttpClientFactory httpClientFactory, LocalSettingsSer
         var body = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"Token request failed ({(int)response.StatusCode}): {body}");
+            throw new TokenRequestException(settings.TokenUrl, (int)response.StatusCode, response.ReasonPhrase, body);
 
         var token = await response.Content.ReadFromJsonAsync<TokenResponse>(ct)
             ?? throw new InvalidOperationException("Empty token response.");

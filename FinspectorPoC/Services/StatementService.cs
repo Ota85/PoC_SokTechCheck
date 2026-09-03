@@ -57,19 +57,16 @@ public class StatementService(IHttpClientFactory httpClientFactory)
         RequestId = response.RequestId,
         Statements = response.Statements?.Select(s => new NormalizedStatement
         {
-            DocumentId = s.DocumentId,
-            AccountHolder = s.AccountHolder,
+            BankCode = s.BankCode,
+            AccountName = s.AccountName,
+            ProductName = s.ProductName,
+            AccountHolder = s.Name,
             AccountNumber = s.AccountNumber,
-            BankName = s.BankName,
-            Period = $"{s.StatementFromDate} – {s.StatementToDate}",
-            Currency = s.OpeningBalance?.Currency
-                       ?? s.ClosingBalance?.Currency
-                       ?? s.TotalCredits?.Currency
-                       ?? s.TotalDebits?.Currency,
-            OpeningBalance = s.OpeningBalance?.Value,
-            ClosingBalance = s.ClosingBalance?.Value,
-            TotalCredits = s.TotalCredits?.Value,
-            TotalDebits = s.TotalDebits?.Value,
+            Period = $"{s.StartDate:yyyy-MM-dd} – {s.EndDate:yyyy-MM-dd}",
+            Currency = s.StartBalance?.Currency ?? s.EndBalance?.Currency,
+            IsTrusted = s.IsTrusted,
+            StartBalance = s.StartBalance?.Value,
+            EndBalance = s.EndBalance?.Value,
             Tags = s.Tags,
             Transactions = s.Transactions
         }).ToList() ?? []

@@ -39,6 +39,7 @@ public class FinspectorDtoSerializationTests
 
         Assert.Equal("req-001", root.GetProperty("requestId").GetString());
         Assert.Equal("CZE", root.GetProperty("countryCode").GetString());
+        Assert.Equal("FromEndDate", root.GetProperty("calcLogic").GetString());
         Assert.Equal("REF-123", root.GetProperty("refNo").GetString());
 
         var file = root.GetProperty("files")[0];
@@ -98,6 +99,21 @@ public class FinspectorDtoSerializationTests
         Assert.Equal("MY-REF", refNo);
     }
 
+    [Fact]
+    public void AppSettings_LocalPdfMockPresetUsesTheVerifiedMockContract()
+    {
+        var settings = new AppSettings();
+
+        settings.UseLocalSokordiaTechPdfMock();
+
+        Assert.Equal("http://localhost:5108", settings.BaseApiUrl);
+        Assert.Equal("http://localhost:5108/connect/token", settings.TokenUrl);
+        Assert.Equal("/api/Statement", settings.StatementPath);
+        Assert.Equal("sokordiatech-development", settings.ClientId);
+        Assert.Equal("finspector", settings.OAuthScope);
+        Assert.Null(settings.SavedToken);
+    }
+
     // ── Response deserialization ───────────────────────────────────────────────
 
     [Fact]
@@ -122,33 +138,31 @@ public class FinspectorDtoSerializationTests
     }
 
     [Fact]
-    public void StatementResponse_DeserializesAmountObjects()
+    public void StatementResponse_DeserializesProviderStatementShape()
     {
         var json = """
             {
                 "resultCode": 0,
-                "message": "OK",
-                "requestId": "r1",
                 "statements": [
                     {
-                        "documentId": "doc-1",
-                        "accountHolder": "Jan Novak",
                         "accountNumber": "CZ0001000200030004",
-                        "bankName": "TestBank",
-                        "statementFromDate": "2024-01-01",
-                        "statementToDate": "2024-01-31",
-                        "openingBalance":  { "value": 1000.50, "currency": "CZK" },
-                        "closingBalance":  { "value": 1500.75, "currency": "CZK" },
-                        "totalCredits":    { "value":  800.00, "currency": "CZK" },
-                        "totalDebits":     { "value":  300.25, "currency": "CZK" },
-                        "tags": ["salary", "rent"],
+                        "bankCode": "0100",
+                        "accountName": "Operating account",
+                        "productName": "Current account",
+                        "name": "Jan Novak",
+                        "isTrusted": true,
+                        "startDate": "2024-01-01T00:00:00Z",
+                        "endDate": "2024-01-31T00:00:00Z",
+                        "startBalance":  { "value": 1000.50, "currency": "CZK" },
+                        "endBalance":  { "value": 1500.75, "currency": "CZK" },
+                        "tags": [{ "name": "salary", "flag": false, "amount": { "value": 5000, "currency": "CZK" } }],
                         "transactions": [
                             {
                                 "date": "2024-01-05",
+                                "text": "Payment card",
                                 "description": "Supermarket",
                                 "amount":  { "value": -150.00, "currency": "CZK" },
-                                "balance": { "value":  850.50, "currency": "CZK" },
-                                "type": "debit",
+                                "vs": "123",
                                 "tags": ["groceries"]
                             }
                         ]
@@ -162,30 +176,26 @@ public class FinspectorDtoSerializationTests
         Assert.NotNull(response);
         var stmt = Assert.Single(response.Statements!);
 
-        Assert.Equal("doc-1", stmt.DocumentId);
-        Assert.Equal("Jan Novak", stmt.AccountHolder);
-        Assert.Equal("TestBank", stmt.BankName);
+        Assert.Equal("Jan Novak", stmt.Name);
+        Assert.Equal("Operating account", stmt.AccountName);
+        Assert.Equal("0100", stmt.BankCode);
+        Assert.True(stmt.IsTrusted);
 
-        Assert.NotNull(stmt.OpeningBalance);
-        Assert.Equal(1000.50m, stmt.OpeningBalance!.Value);
-        Assert.Equal("CZK", stmt.OpeningBalance.Currency);
+        Assert.NotNull(stmt.StartBalance);
+        Assert.Equal(1000.50m, stmt.StartBalance!.Value);
+        Assert.Equal("CZK", stmt.StartBalance.Currency);
 
-        Assert.NotNull(stmt.ClosingBalance);
-        Assert.Equal(1500.75m, stmt.ClosingBalance!.Value);
+        Assert.NotNull(stmt.EndBalance);
+        Assert.Equal(1500.75m, stmt.EndBalance!.Value);
 
-        Assert.NotNull(stmt.TotalCredits);
-        Assert.Equal(800.00m, stmt.TotalCredits!.Value);
-
-        Assert.NotNull(stmt.TotalDebits);
-        Assert.Equal(300.25m, stmt.TotalDebits!.Value);
-
-        Assert.Equal(["salary", "rent"], stmt.Tags);
+        Assert.Equal("salary", Assert.Single(stmt.Tags!).Name);
 
         var tx = Assert.Single(stmt.Transactions!);
         Assert.Equal("Supermarket", tx.Description);
         Assert.NotNull(tx.Amount);
         Assert.Equal(-150.00m, tx.Amount!.Value);
         Assert.Equal("CZK", tx.Amount.Currency);
+        Assert.Equal("123", tx.VariableSymbol);
         Assert.Equal(["groceries"], tx.Tags);
     }
 
@@ -237,7 +247,7 @@ public class FinspectorDtoSerializationTests
     // ── Normalize helper ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Normalize_ExtractsCurrencyFromOpeningBalance()
+    public void Normalize_ExtractsCurrencyFromStartBalance()
     {
         var response = new StatementResponse
         {
@@ -248,13 +258,11 @@ public class FinspectorDtoSerializationTests
             [
                 new StatementResult
                 {
-                    DocumentId = "d1",
-                    StatementFromDate = "2024-01-01",
-                    StatementToDate = "2024-01-31",
-                    OpeningBalance = new AmountValue { Value = 500m, Currency = "CZK" },
-                    ClosingBalance = new AmountValue { Value = 600m, Currency = "CZK" },
-                    TotalCredits = new AmountValue { Value = 200m, Currency = "CZK" },
-                    TotalDebits = new AmountValue { Value = 100m, Currency = "CZK" }
+                    AccountName = "Operating account",
+                    StartDate = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                    EndDate = new DateTimeOffset(2024, 1, 31, 0, 0, 0, TimeSpan.Zero),
+                    StartBalance = new AmountValue { Value = 500m, Currency = "CZK" },
+                    EndBalance = new AmountValue { Value = 600m, Currency = "CZK" }
                 }
             ]
         };
@@ -264,10 +272,8 @@ public class FinspectorDtoSerializationTests
 
         Assert.Equal(0, normalized.ResultCode);
         Assert.Equal("CZK", stmt.Currency);
-        Assert.Equal(500m, stmt.OpeningBalance);
-        Assert.Equal(600m, stmt.ClosingBalance);
-        Assert.Equal(200m, stmt.TotalCredits);
-        Assert.Equal(100m, stmt.TotalDebits);
+        Assert.Equal(500m, stmt.StartBalance);
+        Assert.Equal(600m, stmt.EndBalance);
         Assert.Equal("2024-01-01 – 2024-01-31", stmt.Period);
     }
 }

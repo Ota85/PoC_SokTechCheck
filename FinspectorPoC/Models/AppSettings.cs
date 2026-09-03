@@ -2,6 +2,10 @@ namespace FinspectorPoC.Models;
 
 public class AppSettings
 {
+    public const string LocalMockBaseUrl = "http://localhost:5108";
+    public const string LocalMockClientId = "sokordiatech-development";
+    public const string LocalMockClientSecret = "synthetic-sokordiatech-client-secret";
+
     public string BaseApiUrl { get; set; } = "https://finspector.goodveri.online";
     public string TokenUrl { get; set; } = "https://finspector.goodveri.online/connect/token";
     public string StatementPath { get; set; } = "/api/Statement";
@@ -31,5 +35,19 @@ public class AppSettings
     public DateTimeOffset? Psd2AccessTokenExpiry { get; set; }
     public string? Psd2RefreshToken { get; set; }
     public DateTimeOffset? Psd2RefreshTokenExpiry { get; set; }
+
+    public void UseLocalSokordiaTechPdfMock()
+    {
+        BaseApiUrl = LocalMockBaseUrl;
+        TokenUrl = $"{LocalMockBaseUrl}/connect/token";
+        StatementPath = "/api/Statement";
+        ClientId = LocalMockClientId;
+        ClientSecret = LocalMockClientSecret;
+        OAuthScope = "finspector";
+        CountryCode = "CZE";
+        ReferenceNumber = "POC-LOCAL-MOCK";
+        SavedToken = null;
+        TokenExpiry = null;
+    }
 }
 
