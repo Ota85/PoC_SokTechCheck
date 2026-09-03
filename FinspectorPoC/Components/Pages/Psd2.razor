@@ -214,9 +214,7 @@
                 _token = await TokenSvc.GetValidTokenAsync(_settings, forceNew: false);
             await action(_token!);
             if (!IsSuccess)
-                _error = string.IsNullOrWhiteSpace(_raw)
-                    ? $"HTTP {_status}; the provider returned an empty response body."
-                    : $"HTTP {_status}; inspect the provider response below.";
+                _error = DescribeProviderFailure();
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _busy = false; }
@@ -227,6 +225,26 @@
         _responseLabel = label;
         _status = status;
         _raw = raw;
+    }
+
+    private string DescribeProviderFailure()
+    {
+        var providerDetails = string.IsNullOrWhiteSpace(_raw)
+            ? " Sokordia returned no diagnostic response body."
+            : " See the provider response below for details.";
+
+        return (_responseLabel, _status) switch
+        {
+            ("AccountList", 404) =>
+                "No authorized accounts were found for the selected bank and Client Code. Complete bank authorization in the returned bank window, then try again using the same bank, Client Code, and reference number." + providerDetails,
+            ("AccountInfo", 404) =>
+                "No account information was found for the selected account. Load authorized accounts first, then select an account returned by Sokordia." + providerDetails,
+            ("AccountAuth", 400) =>
+                "Sokordia rejected the bank-authorization request. Check the callback URL, public IPv4, browser user-agent, and reference number." + providerDetails,
+            ("ProviderList", 404) =>
+                "The configured ProviderList endpoint was not found. Check the sandbox base API URL and endpoint path." + providerDetails,
+            _ => $"{_responseLabel ?? "PSD2 request"} failed with HTTP {_status}." + providerDetails
+        };
     }
 
     private bool ValidateAuthorizationSettings()
