@@ -33,9 +33,9 @@ A small, self-contained Blazor Server application that lets a **local developer*
    cp appsettings.example.json appsettings.local.json
    ```
 
-   Edit `appsettings.local.json` with your sandbox Client ID, Client Secret, OAuth scope, GUID client code,
-   registered callback URL, and token URL. The API host is `https://finspector.goodveri.online`, but it does
-   not expose the OAuth token endpoint; obtain that URL from SokordiaTech with the sandbox credentials.
+   Edit `appsettings.local.json` with your sandbox Client ID, Client Secret, GUID client code, and registered
+   callback URL. The example defaults use the verified sandbox API and OAuth endpoints. Keep the values supplied
+   with your sandbox account if they differ.
 
    > The local settings file is read from and written to the application's **output directory** (e.g. `bin/Debug/net10.0/appsettings.local.json`). The UI shows the full path.
 

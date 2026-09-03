@@ -2,13 +2,12 @@ namespace FinspectorPoC.Models;
 
 public class AppSettings
 {
-    public string BaseApiUrl { get; set; } = "https://finspector.goodveri.online";
-    // The OAuth authority is supplied with the sandbox credentials; the API host does not expose /connect/token.
-    public string TokenUrl { get; set; } = "";
+    public string BaseApiUrl { get; set; } = "https://sandbox-finspector.goodveri.online";
+    public string TokenUrl { get; set; } = "https://identity.goodveri.online/connect/token";
     public string StatementPath { get; set; } = "/api/Statement";
     public string ClientId { get; set; } = "";
     public string ClientSecret { get; set; } = "";
-    public string OAuthScope { get; set; } = "finspector";
+    public string OAuthScope { get; set; } = "sc:demo:finspector";
     public string CountryCode { get; set; } = "CZE";
     public string ReferenceNumber { get; set; } = "";
 
