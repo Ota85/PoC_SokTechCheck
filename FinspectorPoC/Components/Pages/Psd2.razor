@@ -21,11 +21,12 @@
         <div class="col-md-4"><label class="form-label">Client Secret</label><input class="form-control" type="password" @bind="_settings.ClientSecret" /></div>
         <div class="col-md-2"><label class="form-label">OAuth Scope</label><input class="form-control" @bind="_settings.OAuthScope" /></div>
         <div class="col-md-2"><label class="form-label">Country</label><input class="form-control" @bind="_settings.CountryCode" /></div>
-        <div class="col-md-4"><label class="form-label">Client Code (GUID)</label><input class="form-control" @bind="_settings.ClientCode" /></div>
-        <div class="col-md-8"><label class="form-label">Registered return URL</label><input class="form-control" @bind="_settings.Psd2CallbackUrl" /></div>
+        <div class="col-md-4"><label class="form-label">Client Code <small class="text-muted">(applicant UUID; generated when blank)</small></label><input class="form-control" @bind="_settings.ClientCode" /></div>
+        <div class="col-md-8"><label class="form-label">Registered return URL <small class="text-muted">(the required <code>clientId</code> parameter is added automatically)</small></label><input class="form-control" @bind="_settings.Psd2CallbackUrl" /></div>
         <div class="col-md-4"><label class="form-label">Reference number</label><input class="form-control" @bind="_settings.Psd2ReferenceNumber" /></div>
         <div class="col-md-3"><label class="form-label">User IP</label><input class="form-control" @bind="_settings.Psd2UserIp" /></div>
         <div class="col-md-5"><label class="form-label">User-agent</label><input class="form-control" @bind="_settings.Psd2UserBrowserAgent" /></div>
+        <div class="col-md-3"><label class="form-label">History days <small class="text-muted">(1-365)</small></label><input class="form-control" type="number" min="1" max="365" @bind="_settings.Psd2HistoryDays" /></div>
     </div>
     <button class="btn btn-primary mt-3" @onclick="SaveSettings">Save settings</button>
     @if (_saved) { <span class="text-success ms-2">Saved ✓</span> }
@@ -60,9 +61,9 @@
 </div></div>
 
 @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
-@if (!string.IsNullOrWhiteSpace(_raw))
+@if (_status.HasValue)
 {
-    <div class="card mb-3"><div class="card-header"><strong>Latest provider response: @_responseLabel</strong><span class="badge @(IsSuccess ? "bg-success" : "bg-danger") ms-2">HTTP @_status</span></div><pre class="m-0 p-3 bg-light" style="max-width:100%;max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">@_raw</pre></div>
+    <div class="card mb-3"><div class="card-header"><strong>Latest provider response: @_responseLabel</strong><span class="badge @(IsSuccess ? "bg-success" : "bg-danger") ms-2">HTTP @_status</span></div><pre class="m-0 p-3 bg-light" style="max-width:100%;max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word">@(string.IsNullOrWhiteSpace(_raw) ? "<empty response body>" : _raw)</pre></div>
 }
 
 @code {
@@ -118,6 +119,7 @@
 
     private async Task StartAuthorization()
     {
+        if (!ValidateAuthorizationSettings()) return;
         await Execute(async token =>
         {
             var result = await Psd2Svc.StartAuthorizationAsync(_settings, token, _providerCode!);
@@ -128,6 +130,7 @@
 
     private async Task LoadAccounts()
     {
+        if (!EnsureClientCode()) return;
         await Execute(async token =>
         {
             var result = await Psd2Svc.GetAccountsAsync(_settings, token, _providerCode!);
@@ -138,6 +141,12 @@
 
     private async Task LoadAccountInfo()
     {
+        if (!EnsureClientCode()) return;
+        if (_settings.Psd2HistoryDays is < 1 or > 365)
+        {
+            _error = "History days must be between 1 and 365.";
+            return;
+        }
         await Execute(async token =>
         {
             var result = await Psd2Svc.GetAccountInfoAsync(_settings, token, _providerCode!, _accountId);
@@ -147,6 +156,7 @@
 
     private async Task RevokeAuthorization()
     {
+        if (!EnsureClientCode()) return;
         await Execute(async token =>
         {
             var result = await Psd2Svc.RevokeAuthorizationAsync(_settings, token);
@@ -162,7 +172,10 @@
             if (string.IsNullOrWhiteSpace(_token) || _settings.TokenExpiry <= DateTimeOffset.UtcNow)
                 _token = await TokenSvc.GetValidTokenAsync(_settings, forceNew: false);
             await action(_token!);
-            if (!IsSuccess) _error = $"HTTP {_status}; inspect the provider response below.";
+            if (!IsSuccess)
+                _error = string.IsNullOrWhiteSpace(_raw)
+                    ? $"HTTP {_status}; the provider returned an empty response body."
+                    : $"HTTP {_status}; inspect the provider response below.";
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _busy = false; }
@@ -173,5 +186,44 @@
         _responseLabel = label;
         _status = status;
         _raw = raw;
+    }
+
+    private bool ValidateAuthorizationSettings()
+    {
+        if (!EnsureClientCode()) return false;
+        if (!Uri.TryCreate(_settings.Psd2CallbackUrl, UriKind.Absolute, out _))
+        {
+            _error = "Registered return URL must be an absolute URL registered with SokordiaTech.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(_settings.Psd2ReferenceNumber)
+            || string.IsNullOrWhiteSpace(_settings.Psd2UserBrowserAgent))
+        {
+            _error = "Reference number and the applicant's browser user-agent are required for bank authorization.";
+            return false;
+        }
+        if (!System.Net.IPAddress.TryParse(_settings.Psd2UserIp, out var address)
+            || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork
+            || System.Net.IPAddress.IsLoopback(address))
+        {
+            _error = "User IP must be the applicant's non-loopback IPv4 address; do not use 127.0.0.1.";
+            return false;
+        }
+        return true;
+    }
+
+    private bool EnsureClientCode()
+    {
+        if (string.IsNullOrWhiteSpace(_settings.ClientCode))
+        {
+            _settings.ClientCode = Guid.NewGuid().ToString();
+            SettingsService.Save(_settings);
+            return true;
+        }
+
+        if (Guid.TryParse(_settings.ClientCode, out _)) return true;
+
+        _error = "PSD2 Client Code must be a UUID identifying the applicant. Clear the field to generate one for this PoC test.";
+        return false;
     }
 }

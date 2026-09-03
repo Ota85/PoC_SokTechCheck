@@ -24,8 +24,9 @@ public class AppSettings
     public string Psd2AccountInfoPath { get; set; } = "/api/AccountInfo";
     public string Psd2RevokeAuthPath { get; set; } = "/api/RevokeAuth";
     public string Psd2ReferenceNumber { get; set; } = "PSD2-POC";
-    public string Psd2UserIp { get; set; } = "127.0.0.1";
-    public string Psd2UserBrowserAgent { get; set; } = "FinspectorPoC/1.0";
+    public string Psd2UserIp { get; set; } = "";
+    public string Psd2UserBrowserAgent { get; set; } = "";
+    public int Psd2HistoryDays { get; set; } = 90;
     public int Psd2Scope { get; set; } = 1;
 }
 

@@ -19,7 +19,7 @@ public sealed class Psd2Service(IHttpClientFactory httpClientFactory)
             new AccountAuthRequest
             {
                 ClientCode = settings.ClientCode, ProviderCode = providerCode,
-                ReturnUrl = settings.Psd2CallbackUrl, RefNo = settings.Psd2ReferenceNumber,
+                ReturnUrl = BuildReturnUrl(settings.Psd2CallbackUrl, settings.ClientCode), RefNo = settings.Psd2ReferenceNumber,
                 CountryCode = settings.CountryCode, UserIp = settings.Psd2UserIp,
                 UserBrowserAgent = settings.Psd2UserBrowserAgent, Scope = settings.Psd2Scope
             }, ct);
@@ -32,7 +32,7 @@ public sealed class Psd2Service(IHttpClientFactory httpClientFactory)
             new AccountInfoRequest
             {
                 ClientCode = settings.ClientCode, ProviderCode = providerCode, RefNo = settings.Psd2ReferenceNumber,
-                CountryCode = settings.CountryCode, AccountId = accountId
+                CountryCode = settings.CountryCode, AccountId = accountId, Days = settings.Psd2HistoryDays
             }, ct);
 
     public Task<(int, string, RevokeAuthResponse?)> RevokeAuthorizationAsync(AppSettings settings, string token, CancellationToken ct = default) =>
@@ -58,4 +58,13 @@ public sealed class Psd2Service(IHttpClientFactory httpClientFactory)
     }
 
     private static string BuildUrl(string baseUrl, string path) => baseUrl.TrimEnd('/') + "/" + path.TrimStart('/');
+
+    private static string BuildReturnUrl(string callbackUrl, string clientCode)
+    {
+        var uri = new UriBuilder(callbackUrl);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        query["clientId"] = clientCode;
+        uri.Query = query.ToString();
+        return uri.Uri.ToString();
+    }
 }
