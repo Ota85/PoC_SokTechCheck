@@ -167,7 +167,6 @@
                 }
             </span>
             <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleJsonFormatting">@(_showFormattedJson ? "View Raw JSON" : "View Human-Readable JSON")</button>
                 <button class="btn btn-sm btn-outline-secondary" @onclick="DownloadRawJson">⬇ Raw JSON</button>
                 <button class="btn btn-sm btn-outline-primary" @onclick="DownloadFormattedJson">⬇ Human-Readable JSON</button>
             </div>
@@ -274,8 +273,7 @@
     private StatementResponse? _statementResponse;
     private string? _rawJson;
     private int? _httpStatus;
-    private bool _showFormattedJson;
-    private string ResponseForDisplay => FormatJson(_rawJson, _showFormattedJson);
+    private string ResponseForDisplay => FormatJson(_rawJson, formatted: true);
 
     protected override void OnInitialized() => _settings = SettingsService.Load();
 
@@ -354,7 +352,7 @@
 
     private async Task SubmitStatements()
     {
-        _parseBusy = true; _parseError = null; _statementResponse = null; _rawJson = null; _httpStatus = null; _showFormattedJson = false;
+        _parseBusy = true; _parseError = null; _statementResponse = null; _rawJson = null; _httpStatus = null;
         try
         {
             // Ensure we have a valid token
@@ -409,8 +407,6 @@
         if (string.IsNullOrWhiteSpace(_rawJson)) return;
         await DownloadFile("finspector-formatted.json", FormatJson(_rawJson, formatted: true));
     }
-
-    private void ToggleJsonFormatting() => _showFormattedJson = !_showFormattedJson;
 
     private static string FormatJson(string? response, bool formatted)
     {
