@@ -94,6 +94,7 @@
         if (!firstRender) return;
 
         _settings.Psd2UserBrowserAgent = await JS.InvokeAsync<string>("finspector.getUserAgent");
+        await DetectPublicIp();
         await InvokeAsync(StateHasChanged);
     }
 
